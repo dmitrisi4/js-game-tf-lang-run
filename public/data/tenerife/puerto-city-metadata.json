@@ -1,0 +1,121 @@
+{
+	"aoi": {
+		"bufferWorldUnits": 260,
+		"projection": {
+			"centerLat": 28.40330075,
+			"centerLon": -16.5453185,
+			"metersToWorld": 0.26,
+			"offset": {
+				"x": 0,
+				"z": 0
+			}
+		},
+		"roadBounds": {
+			"maxX": 765.75,
+			"maxZ": 501.53,
+			"minX": -765.75,
+			"minZ": -501.53
+		},
+		"version": 1,
+		"wgs84Bounds": {
+			"east": -16.505028311,
+			"north": 28.429611939,
+			"south": 28.376989561,
+			"west": -16.585608689
+		},
+		"worldBounds": {
+			"maxX": 1025.75,
+			"maxZ": 761.53,
+			"minX": -1025.75,
+			"minZ": -761.53
+		}
+	},
+	"attribution": {
+		"cnig": {
+			"license": "Compatible with CC-BY 4.0 per IGN/CNIG data policy",
+			"source": "IGN/CNIG PNOA LiDAR-derived MDT/DTM",
+			"url": "https://www.ign.es/web/politica-datos"
+		},
+		"osm": {
+			"license": "Open Data Commons Open Database License (ODbL)",
+			"source": "OpenStreetMap contributors via local Overpass/GeoJSON exports",
+			"url": "https://www.openstreetmap.org/copyright"
+		}
+	},
+	"buildings": {
+		"footprintCount": 3318,
+		"runtimeBuildingCount": 160
+	},
+	"generatedAt": "2026-05-16T14:58:36.970Z",
+	"roads": {
+		"countsByLayer": {
+			"main": 1372,
+			"service": 654,
+			"walk": 1401
+		},
+		"lineCount": 3427,
+		"pointCount": 12902,
+		"segmentCount": 9475
+	},
+	"sourceKind": "osm-and-generated-terrain-pipeline",
+	"version": 1,
+	"terrain": {
+		"blendPath": "art/blender/puerto_de_la_cruz_terrain.blend",
+		"collisionStrategy": "static mesh terrain for raycasts and environment collision",
+		"columns": 342,
+		"glbPath": "public/models/environment/puerto-de-la-cruz-terrain.glb",
+		"maxHeight": 60.764,
+		"minHeight": 0.39,
+		"rows": 254,
+		"sourceKind": "procedural-fallback-awaiting-cnig-dtm",
+		"triangleCount": 172546,
+		"vertexCount": 86868,
+		"worldBounds": {
+			"maxX": 1025.75,
+			"maxZ": 761.53,
+			"minX": -1025.75,
+			"minZ": -761.53
+		}
+	},
+	"visualModel": {
+		"buildingFootprintCount": 3087,
+		"coast": {
+			"hasCoast": true,
+			"hasOcean": true
+		},
+		"landuseOverlayCount": 490,
+		"referenceBasis": [
+			{
+				"focus": "coastline, volcanic foreshore, Lago Martianez, and town setting",
+				"url": "https://tenerifepost.com/puertodelacruz.html"
+			},
+			{
+				"focus": "aerial city massing, coast, Atlantic edge, and colorful dense buildings",
+				"url": "https://www.pexels.com/photo/aerial-view-of-puerto-de-la-cruz-tenerife-coastline-30372578/"
+			},
+			{
+				"focus": "coastal architecture and rugged waterfront composition",
+				"url": "https://www.pexels.com/photo/breathtaking-coastal-view-in-puerto-de-la-cruz-31391838/"
+			},
+			{
+				"focus": "Puerto de la Cruz coast and black volcanic shore references",
+				"url": "https://commons.wikimedia.org/wiki/Category:Coasts_of_Puerto_de_la_Cruz"
+			},
+			{
+				"focus": "Puerto de la Cruz panorama with Teide volcano in the background",
+				"url": "https://sasvata.travel/inspiration/aerial_view_of_puerto_de_la_cruz_with_teide_volcano_in_the_background_tenerife_by_sasvata-travel-jpg/"
+			}
+		],
+		"style": "procedural low-poly city massing from OSM footprints with photo-reference-inspired colors",
+		"visualScale": {
+			"buildingFootprintScale": 1.35,
+			"buildingHeightScale": 1.18,
+			"buildingLocalSpacingScale": 1.06,
+			"buildingSpacingBlockWorldUnits": 72.0
+		},
+		"teide": {
+			"hasOrotavaRidge": true,
+			"hasTeideBackdrop": true
+		}
+	}
+}

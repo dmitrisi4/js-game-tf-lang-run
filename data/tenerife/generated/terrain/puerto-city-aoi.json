@@ -1,0 +1,31 @@
+{
+	"bufferWorldUnits": 260,
+	"projection": {
+		"centerLat": 28.40330075,
+		"centerLon": -16.5453185,
+		"metersToWorld": 0.26,
+		"offset": {
+			"x": 0,
+			"z": 0
+		}
+	},
+	"roadBounds": {
+		"maxX": 765.75,
+		"maxZ": 501.53,
+		"minX": -765.75,
+		"minZ": -501.53
+	},
+	"version": 1,
+	"wgs84Bounds": {
+		"east": -16.505028311,
+		"north": 28.429611939,
+		"south": 28.376989561,
+		"west": -16.585608689
+	},
+	"worldBounds": {
+		"maxX": 1025.75,
+		"maxZ": 761.53,
+		"minX": -1025.75,
+		"minZ": -761.53
+	}
+}
