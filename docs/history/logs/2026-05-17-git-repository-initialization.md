@@ -14,4 +14,7 @@
 
 ## Validation
 
-- Planned checks: `git status --short --branch --ignored`, `git ls-files`, `git remote -v`, and `git log --oneline --decorate`.
+- `git status --short --branch --ignored` showed a clean tracked tree with only expected ignored local files.
+- `git ls-files | rg '(^node_modules/|^dist/|(^|/)\\.env|\\.blend1$|__pycache__|\\.pyc$)'` returned no tracked private/generated matches.
+- `git remote -v` confirmed `origin` as `https://github.com/dmitrisi4/js-game-tf-lang-run.git`.
+- `git push -u origin main` published `main` and configured upstream tracking.
