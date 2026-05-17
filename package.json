@@ -1,0 +1,53 @@
+{
+	"name": "keyarena",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"scripts": {
+		"dev": "vite",
+		"build": "tsc -b && vite build",
+		"lint": "biome lint .",
+		"format": "biome format . --write",
+		"check": "biome check .",
+		"preview": "vite preview",
+		"test": "vitest --run --passWithNoTests",
+		"test:ci": "vitest --run",
+		"test:watch": "vitest",
+		"test:ui": "vitest --ui --passWithNoTests"
+	},
+	"dependencies": {
+		"@babylonjs/core": "^8.56.2",
+		"@babylonjs/gui": "^8.56.2",
+		"@babylonjs/havok": "^1.3.12",
+		"@babylonjs/loaders": "^8.56.2",
+		"@babylonjs/materials": "^8.56.2",
+		"@tanstack/react-query": "^5.100.9",
+		"react": "^19.2.5",
+		"react-babylonjs": "^3.2.5-beta.2",
+		"react-dom": "^19.2.5",
+		"react-reconciler": "0.31.0",
+		"zustand": "^5.0.12"
+	},
+	"devDependencies": {
+		"@babylonjs/inspector": "8",
+		"@biomejs/biome": "^2.4.14",
+		"@eslint/js": "^10.0.1",
+		"@testing-library/dom": "^10.4.1",
+		"@testing-library/react": "^16.3.2",
+		"@types/node": "^24.12.2",
+		"@types/react": "18",
+		"@types/react-dom": "18",
+		"@vitejs/plugin-react": "^6.0.1",
+		"@vitest/ui": "^4.1.5",
+		"eslint": "^10.2.1",
+		"eslint-plugin-react-hooks": "^7.1.1",
+		"eslint-plugin-react-refresh": "^0.5.2",
+		"globals": "^17.5.0",
+		"jsdom": "^29.1.1",
+		"path-browserify": "^1.0.1",
+		"typescript": "~6.0.2",
+		"typescript-eslint": "^8.58.2",
+		"vite": "^8.0.10",
+		"vitest": "^4.1.5"
+	}
+}
