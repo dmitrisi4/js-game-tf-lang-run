@@ -1,0 +1,33 @@
+:root {
+	--game-ui-font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+html,
+body,
+#root {
+	width: 100%;
+	height: 100%;
+	padding: 0;
+	margin: 0;
+	overflow: hidden;
+	font-family: var(--game-ui-font-family);
+}
+
+button,
+input,
+select,
+textarea {
+	font: inherit;
+}
+
+canvas {
+	display: block;
+	width: 100%;
+	height: 100%;
+	outline: none;
+}
+
+/* Ensure the inspector overlays correctly */
+.babylon-inspector {
+	z-index: 1000;
+}

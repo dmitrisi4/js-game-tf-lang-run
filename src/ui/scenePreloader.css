@@ -1,0 +1,113 @@
+.scene-preloader {
+	position: fixed;
+	inset: 0;
+	z-index: 900;
+	display: grid;
+	gap: 18px;
+	place-content: center;
+	justify-items: center;
+	min-width: 0;
+	color: #f5dfad;
+	text-align: center;
+	text-shadow: 0 2px 4px rgb(0 0 0 / 70%);
+	background:
+		linear-gradient(180deg, rgb(45 58 74 / 92%), rgb(18 19 21 / 96%)),
+		radial-gradient(circle at 50% 42%, rgb(230 181 92 / 22%), transparent 42%);
+}
+
+.scene-preloader-mark {
+	position: relative;
+	display: grid;
+	width: 78px;
+	aspect-ratio: 1;
+	place-items: center;
+	border: 2px solid rgb(229 181 91 / 72%);
+	border-radius: 50%;
+	box-shadow:
+		0 18px 42px rgb(0 0 0 / 38%),
+		inset 0 0 22px rgb(0 0 0 / 44%);
+	animation: scene-preloader-pulse 1.45s ease-in-out infinite;
+}
+
+.scene-preloader-mark span {
+	position: absolute;
+	width: 12px;
+	aspect-ratio: 1;
+	background: #f0c063;
+	border-radius: 50%;
+	box-shadow: 0 0 18px rgb(240 192 99 / 72%);
+}
+
+.scene-preloader-mark span:nth-child(1) {
+	transform: translate(-22px, 12px);
+}
+
+.scene-preloader-mark span:nth-child(2) {
+	transform: translate(0, -20px);
+}
+
+.scene-preloader-mark span:nth-child(3) {
+	transform: translate(22px, 12px);
+}
+
+.scene-preloader-copy {
+	display: grid;
+	gap: 6px;
+	min-width: min(320px, calc(100vw - 48px));
+}
+
+.scene-preloader-copy strong {
+	color: #f6c76d;
+	font-size: 20px;
+	font-weight: 900;
+	line-height: 1;
+	text-transform: uppercase;
+}
+
+.scene-preloader-copy span {
+	color: #e7d8b7;
+	font-size: 13px;
+	font-weight: 700;
+	line-height: 1.35;
+	text-transform: uppercase;
+}
+
+.scene-preloader-bar {
+	width: min(320px, calc(100vw - 48px));
+	height: 8px;
+	overflow: hidden;
+	background: rgb(0 0 0 / 52%);
+	border: 1px solid rgb(229 181 91 / 34%);
+	border-radius: 999px;
+	box-shadow: inset 0 1px 5px rgb(0 0 0 / 76%);
+}
+
+.scene-preloader-bar span {
+	display: block;
+	width: 42%;
+	height: 100%;
+	background: linear-gradient(90deg, #d08b35, #f4d681, #d08b35);
+	border-radius: inherit;
+	animation: scene-preloader-bar 1.2s ease-in-out infinite;
+}
+
+@keyframes scene-preloader-pulse {
+	0%,
+	100% {
+		transform: scale(0.98);
+	}
+
+	50% {
+		transform: scale(1.04);
+	}
+}
+
+@keyframes scene-preloader-bar {
+	0% {
+		transform: translateX(-110%);
+	}
+
+	100% {
+		transform: translateX(250%);
+	}
+}
