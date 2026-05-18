@@ -152,3 +152,90 @@ Verification note:
 - `npm run test -- src/scenes/environment/tenerifeRoadLayers.test.ts src/scenes/environment/worldData.test.ts` passed.
 - `npm run build` passed.
 - Browser verification still needs a manual/user-visible check because local Playwright modules are not installed in this workspace and the browser automation plugin did not expose the needed runtime tool in this session.
+
+## 8. Add Real Terrain Building Blockers
+
+Status: Implemented, needs browser movement check
+
+Context:
+
+- User reports that in `http://127.0.0.1:5173/?tenerife=1&terrain=real` the hero can walk through many houses.
+- In real terrain mode, the visible Puerto buildings are baked into `puerto-de-la-cruz-terrain.glb`; the separate `WorldBuildings` layer is disabled.
+- First proxy-box attempt did not stop wall traversal reliably enough. The active fix uses static mesh collision on the baked `puerto-osm-city-buildings` mesh so collision matches visible walls.
+
+Tasks:
+
+- [x] Confirm real terrain buildings are visual-only in the current runtime loader.
+- [x] Add static building collision to the baked Puerto city building mesh.
+- [x] Keep building collision aggregate separate from terrain aggregate for cleanup.
+- [x] Add focused tests for city building mesh identification.
+- [x] Run targeted validation.
+- [x] Record follow-up idea for an original jump/climb mechanic on these houses.
+
+Implementation note:
+
+- `PuertoCityTerrain` now creates static physics for `puerto-osm-city-buildings` in `?tenerife=1&terrain=real`.
+- This replaces the first proxy-box attempt because the user confirmed the hero still passed through walls.
+- Collision ownership: static body, mesh collider on baked city building mesh, mass `0`, restitution `0.01`, friction `0.62`, no CCD.
+- Follow-up mechanic idea: keep blocker walls solid, but add an explicit "word vault" or "letter boost" traversal action that lets the player launch onto roof entry points/roof pads instead of simply increasing jump height everywhere.
+
+Verification note:
+
+- `bun run test src/scenes/environment/PuertoCityTerrain.test.ts` passed.
+- `bunx biome check` passed for the edited source files; markdown task files are ignored by the current Biome config.
+- `bun run build` passed.
+- `bun run check` still fails on pre-existing unrelated formatting issues in `src/store/selectors.test.ts`, `src/ui/InventoryOverlay.tsx`, and `src/ui/gameHud.css`.
+- Browser plugin verification was unavailable because the Browser workflow did not expose its required Node REPL tool in this session.
+- The existing dev server responded with HTTP `200` at `http://127.0.0.1:5173/?tenerife=1&terrain=real`.
+
+## 9. Add Roof Parkour Traversal
+
+Status: Implemented, needs browser movement tuning
+
+Context:
+
+- User wants a simple but interesting building traversal mechanic:
+	- wall jump at houses when the player faces a wall
+	- ledge grab near the roof edge
+	- automatic climb up
+	- roof landing points so physics does not place the player arbitrarily
+
+Tasks:
+
+- [x] Generate runtime roof landing points from Puerto building footprints and DEM heights.
+- [x] Add player helper logic for finding a valid wall hit and roof landing point.
+- [x] Add wall jump, ledge grab, and climb up traversal state to `Player`.
+- [x] Add focused tests for landing selection and traversal helpers.
+- [x] Run targeted validation and build.
+
+Implementation note:
+
+- Added `scripts/geo/build_puerto_roof_landings.mjs`.
+- Generated `public/data/tenerife/puerto-roof-landings-runtime.json` with 2,506 roof landing points.
+- Roof landing centers use the player capsule half-height offset (`0.9`) above `roofY`, so the physics body lands on the roof surface instead of floating visibly above it.
+- Added `src/scenes/player/roofTraversal.ts` for URL gating, building mesh matching, planar facing, roof landing selection, and ledge position calculation.
+- `Player` now loads roof landings only in `?tenerife=1&terrain=real`.
+- When jump triggers while grounded and the player is facing `puerto-osm-city-buildings`, the normal jump is replaced by:
+	- wall-jump impulse away/up from the wall
+	- ledge-grab hold near the roof
+	- climb-up interpolation to the selected landing point
+- Follow-up tuning moved the ledge grab point outside the wall by capsule clearance and explicitly syncs the physics body during ledge/climb, so the first impulse cannot skip the grab phase.
+- Runtime feedback showed traversal no longer started after the tuning because the baked building mesh was still `isPickable = false`; `PuertoCityTerrain` now keeps building meshes pickable so the wall-jump ray can detect them.
+
+Verification note:
+
+- Regenerated roof landing data after lowering the landing center lift from `1.35` to `0.9`.
+- `bun run test src/scenes/player/roofTraversal.test.ts` passed.
+- `bun run test src/scenes/environment/PuertoCityTerrain.test.ts src/scenes/player/roofTraversal.test.ts` passed after restoring building raycast pickability.
+- `bunx biome check src/scenes/player/Player.tsx src/scenes/player/roofTraversal.ts src/scenes/player/roofTraversal.test.ts` passed.
+- `bunx biome check src/scenes/environment/PuertoCityTerrain.tsx src/scenes/player/Player.tsx` passed after restoring building raycast pickability.
+- `bun run build` passed.
+- Existing dev server returned the updated roof landing JSON at `http://127.0.0.1:5173/data/tenerife/puerto-roof-landings-runtime.json`.
+
+Verification note:
+
+- `bun run test src/scenes/player/roofTraversal.test.ts src/scenes/environment/PuertoCityTerrain.test.ts` passed.
+- Targeted `bunx biome check` passed for edited source/script files.
+- `bun run build` passed.
+- `bun run check` still fails on pre-existing unrelated formatting issues in `src/store/selectors.test.ts`, `src/ui/InventoryOverlay.tsx`, and `src/ui/gameHud.css`.
+- Existing dev server returned HTTP `200` for `/data/tenerife/puerto-roof-landings-runtime.json`.

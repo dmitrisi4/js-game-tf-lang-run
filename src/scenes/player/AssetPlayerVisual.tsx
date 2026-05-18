@@ -12,6 +12,7 @@ import '@babylonjs/loaders/glTF';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useBeforeRender, useScene } from 'react-babylonjs';
+import { isRoofParkourBuildingMeshName } from './roofParkourController';
 
 const PLAYER_MODEL_ROOT_URL = '/models/hero/pumkinboy-rigged-animated-character/source/';
 const PLAYER_MODEL_FILENAME = 'Pumpkinboy_10Animations.glb';
@@ -31,6 +32,9 @@ const ROOT_MOTION_NODE_NAMES = new Set([
 const BODY_CENTER_NODE_NAMES = ['ROOT', 'Back_Low', 'Leg_Up.l', 'Leg_Up.r'];
 const FOOT_NODE_NAMES = ['Toe.l', 'Toe.r', 'Foot.l', 'Foot.r'];
 const PLAYER_VISUAL_GROUND_MESH_NAMES = new Set(['ground1', 'tenerife-seabed']);
+
+const isPlayerVisualGroundMeshName = (name: string): boolean =>
+	PLAYER_VISUAL_GROUND_MESH_NAMES.has(name) || isRoofParkourBuildingMeshName(name);
 
 type PropsType = {
 	facingYawRef: React.RefObject<number>;
@@ -118,7 +122,7 @@ const getVisualFootAnchorPosition = (targetMesh: Mesh, scene: BabylonScene): Vec
 	);
 	const groundHit = scene.pickWithRay(
 		new Ray(rayOrigin, Vector3.DownReadOnly, PLAYER_VISUAL_GROUND_RAY_LENGTH),
-		(mesh) => PLAYER_VISUAL_GROUND_MESH_NAMES.has(mesh.name) && mesh.isEnabled() && mesh.isPickable,
+		(mesh) => isPlayerVisualGroundMeshName(mesh.name) && mesh.isEnabled() && mesh.isPickable,
 	);
 
 	if (groundHit?.hit && groundHit.pickedPoint) {
