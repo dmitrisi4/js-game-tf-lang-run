@@ -54,6 +54,14 @@ const findPuertoTerrainMesh = (meshes: AbstractMesh[]): Mesh | null => {
 	);
 };
 
+export const isPuertoCityBuildingMeshName = (name: string): boolean =>
+	name.toLowerCase().includes('puerto-osm-city-buildings');
+
+const findPuertoBuildingMeshes = (meshes: AbstractMesh[]): Mesh[] =>
+	meshes.filter(
+		(mesh): mesh is Mesh => mesh instanceof Mesh && isPuertoCityBuildingMeshName(mesh.name),
+	);
+
 /**
  * Loads the generated Puerto de la Cruz terrain patch as the active `ground1` mesh.
  */
@@ -61,6 +69,7 @@ const PuertoCityTerrain: React.FC<PropsType> = ({ havokPlugin, onReadyChange }) 
 	const scene = useScene();
 	const importedMeshesRef = useRef<AbstractMesh[]>([]);
 	const physicsAggregateRef = useRef<PhysicsAggregate | null>(null);
+	const buildingPhysicsAggregatesRef = useRef<PhysicsAggregate[]>([]);
 	const materialRef = useRef<PBRMaterial | null>(null);
 
 	useEffect(() => {
@@ -85,6 +94,7 @@ const PuertoCityTerrain: React.FC<PropsType> = ({ havokPlugin, onReadyChange }) 
 
 				importedMeshesRef.current = result.meshes;
 				const terrainMesh = findPuertoTerrainMesh(result.meshes);
+				const buildingMeshes = findPuertoBuildingMeshes(result.meshes);
 
 				for (const mesh of result.meshes) {
 					mesh.isPickable = false;
@@ -109,6 +119,19 @@ const PuertoCityTerrain: React.FC<PropsType> = ({ havokPlugin, onReadyChange }) 
 						{ friction: 0.78, mass: 0, restitution: 0.04 },
 						scene,
 					);
+
+					buildingPhysicsAggregatesRef.current = buildingMeshes.map((buildingMesh) => {
+						buildingMesh.isPickable = true;
+						buildingMesh.checkCollisions = true;
+						buildingMesh.computeWorldMatrix(true);
+
+						return new PhysicsAggregate(
+							buildingMesh,
+							PhysicsShapeType.MESH,
+							{ friction: 0.62, mass: 0, restitution: 0.01 },
+							scene,
+						);
+					});
 				}
 
 				onReadyChange?.(true);
@@ -123,6 +146,10 @@ const PuertoCityTerrain: React.FC<PropsType> = ({ havokPlugin, onReadyChange }) 
 			onReadyChange?.(false);
 			physicsAggregateRef.current?.dispose();
 			physicsAggregateRef.current = null;
+			for (const aggregate of buildingPhysicsAggregatesRef.current) {
+				aggregate.dispose();
+			}
+			buildingPhysicsAggregatesRef.current = [];
 
 			for (const mesh of importedMeshesRef.current) {
 				if (!mesh.isDisposed()) {
