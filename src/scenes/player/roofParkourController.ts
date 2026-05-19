@@ -1,4 +1,5 @@
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { isTenerifeFullIslandTerrainMeshName } from '@/scenes/environment/tenerifeFullIslandConfig';
 import { getCapsuleCenterYForFloor, PLAYER_CAPSULE_HALF_HEIGHT } from './playerCapsuleMetrics';
 import {
 	getPlanarFacingDirection,
@@ -122,6 +123,8 @@ export const isRoofParkourBuildingMeshName = (meshName: string): boolean =>
 export const isPlayerGroundMeshName = (meshName: string): boolean =>
 	meshName === 'ground1' ||
 	meshName === 'tenerife-seabed' ||
+	meshName === 'tenerife-full-island-seabed' ||
+	isTenerifeFullIslandTerrainMeshName(meshName) ||
 	isRoofParkourBuildingMeshName(meshName);
 
 /** Returns whether a normal is floor-like enough for standing. */

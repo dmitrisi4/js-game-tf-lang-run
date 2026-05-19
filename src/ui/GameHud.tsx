@@ -51,6 +51,12 @@ const TENERIFE_ROOT_OFFSET = {
 	z: TENERIFE_CITY_ANCHOR.z - TENERIFE_PUERTO_LOCAL_POSITION.z * TENERIFE_PREVIEW_SCALE,
 };
 const TENERIFE_MAP_BOUNDS: MapBounds = { minX: -45, maxX: 42, minZ: -19, maxZ: 19.5 };
+const TENERIFE_FULL_ISLAND_MAP_BOUNDS: MapBounds = {
+	maxX: 1225,
+	maxZ: 1225,
+	minX: -1225,
+	minZ: -1225,
+};
 const TENERIFE_MAP_LAND_PATH =
 	'M 1.7 54.9 L 4.4 43.3 L 8.6 37.2 L 13.8 29.6 L 21.3 24.6 L 30.5 20.3 L 40.0 15.4 L 50.3 8.4 L 58.4 6.1 L 65.5 9.6 L 74.5 14.9 L 81.4 13.4 L 88.3 6.1 L 96.0 4.8 L 98.9 14.2 L 96.2 25.3 L 91.7 33.2 L 88.6 42.8 L 84.6 53.2 L 79.5 65.1 L 74.7 74.2 L 68.7 81.5 L 60.7 86.6 L 52.9 90.4 L 46.6 95.4 L 38.2 95.9 L 30.1 91.6 L 23.2 85.8 L 16.8 78.2 L 11.8 70.1 L 6.0 63.5 Z';
 const TENERIFE_MAP_RIDGE_PATH =
@@ -104,6 +110,13 @@ const getPlayerMapPoint = (
 
 	if (!isTenerifeModeEnabled) {
 		return toMapPoint(playerPosition.x, playerPosition.z, ARENA_MAP_BOUNDS);
+	}
+
+	if (
+		typeof window !== 'undefined' &&
+		new URLSearchParams(window.location.search).get('terrain') === 'island-full'
+	) {
+		return toMapPoint(playerPosition.x, playerPosition.z, TENERIFE_FULL_ISLAND_MAP_BOUNDS);
 	}
 
 	return toMapPoint(

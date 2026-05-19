@@ -28,6 +28,23 @@ describe('usePlayerInput', () => {
 		expect(result.current.move).toEqual({ x: 0, y: 0 });
 	});
 
+	it('ignores repeated keydown events that do not change keyboard state', () => {
+		const { result } = renderHook(() => usePlayerInput());
+
+		act(() => {
+			window.dispatchEvent(new KeyboardEvent('keydown', { key: 'w', code: 'KeyW' }));
+		});
+
+		const firstMovingCommands = result.current;
+
+		act(() => {
+			window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW', key: 'w', repeat: true }));
+		});
+
+		expect(result.current).toBe(firstMovingCommands);
+		expect(result.current.move).toEqual({ x: 0, y: 1 });
+	});
+
 	it('maps left shift into sprint input', () => {
 		const { result } = renderHook(() => usePlayerInput());
 
@@ -99,5 +116,22 @@ describe('usePlayerInput', () => {
 		});
 
 		expect(result.current.look).toEqual({ x: 8, y: -3 });
+	});
+
+	it('can skip pointer look updates when camera owns pointer movement', () => {
+		const { result } = renderHook(() => usePlayerInput(true, false));
+
+		act(() => {
+			window.dispatchEvent(
+				new PointerEvent('pointermove', {
+					clientX: 18,
+					clientY: 17,
+					movementX: 8,
+					movementY: -3,
+				}),
+			);
+		});
+
+		expect(result.current.look).toEqual({ x: 0, y: 0 });
 	});
 });

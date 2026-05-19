@@ -10,8 +10,10 @@ import {
 	shouldRenderRoadMeshes,
 } from './puertoCityConfig';
 import SkyDome from './SkyDome';
+import TenerifeFullIslandTerrain from './TenerifeFullIslandTerrain';
 import TenerifeGeoRoadLayers from './TenerifeGeoRoadLayers';
 import TenerifeIslandPreview from './TenerifeIslandPreview';
+import TenerifeOcean from './TenerifeOcean';
 import TenerifeSafetyLayer from './TenerifeSafetyLayer';
 import { loadTenerifeGeoData, type TenerifeGeoData } from './tenerifeGeoData';
 import WorldBuildings from './WorldBuildings';
@@ -40,6 +42,7 @@ const Environment: React.FC<PropsType> = ({ havokPlugin, onReadyChange }) => {
 	const puertoTerrainMode = getPuertoTerrainMode();
 	const puertoRoadRenderMode = getPuertoRoadRenderMode(puertoTerrainMode);
 	const isPuertoCityTerrainEnabled = isTenerifePreviewEnabled && puertoTerrainMode === 'real';
+	const isFullIslandTerrainEnabled = isTenerifePreviewEnabled && puertoTerrainMode === 'island-full';
 	const shouldRenderTenerifeRoadMeshes = shouldRenderRoadMeshes(puertoRoadRenderMode);
 
 	useEffect(() => {
@@ -75,9 +78,10 @@ const Environment: React.FC<PropsType> = ({ havokPlugin, onReadyChange }) => {
 	}, [isTenerifePreviewEnabled]);
 
 	const geoRoadLayers = tenerifeGeoData?.roadLayers ?? [];
-	const geoRoadsideBuildings: WorldBuilding[] = isPuertoCityTerrainEnabled
-		? []
-		: (tenerifeGeoData?.roadsideBuildings ?? []);
+	const geoRoadsideBuildings: WorldBuilding[] =
+		isPuertoCityTerrainEnabled || isFullIslandTerrainEnabled
+			? []
+			: (tenerifeGeoData?.roadsideBuildings ?? []);
 
 	return (
 		<>
@@ -87,13 +91,24 @@ const Environment: React.FC<PropsType> = ({ havokPlugin, onReadyChange }) => {
 				<>
 					{isPuertoCityTerrainEnabled ? (
 						<PuertoCityTerrain havokPlugin={havokPlugin} onReadyChange={setIsTenerifeIslandReady} />
+					) : isFullIslandTerrainEnabled ? (
+						<TenerifeFullIslandTerrain
+							havokPlugin={havokPlugin}
+							onReadyChange={setIsTenerifeIslandReady}
+						/>
 					) : (
 						<TenerifeIslandPreview havokPlugin={havokPlugin} onReadyChange={setIsTenerifeIslandReady} />
 					)}
-					<TenerifeSafetyLayer havokPlugin={havokPlugin} />
+					{isFullIslandTerrainEnabled ? (
+						<TenerifeOcean havokPlugin={havokPlugin} />
+					) : (
+						<TenerifeSafetyLayer havokPlugin={havokPlugin} />
+					)}
 					{shouldRenderTenerifeRoadMeshes ? <TenerifeGeoRoadLayers roadLayers={geoRoadLayers} /> : null}
 					<WorldBuildings
-						buildings={isPuertoCityTerrainEnabled ? [] : TENERIFE_PREVIEW_BUILDINGS}
+						buildings={
+							isPuertoCityTerrainEnabled || isFullIslandTerrainEnabled ? [] : TENERIFE_PREVIEW_BUILDINGS
+						}
 						debugLabel='Tenerife preview buildings'
 						groundMeshName='ground1'
 						havokPlugin={null}

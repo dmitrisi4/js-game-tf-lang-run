@@ -4,7 +4,7 @@ import { HavokPlugin } from '@babylonjs/core/Physics/v2/Plugins/havokPlugin';
 import type { Scene as BabylonScene } from '@babylonjs/core/scene';
 import HavokPhysics from '@babylonjs/havok';
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Engine, Scene } from 'react-babylonjs';
 import SceneCamera from '@/scenes/camera/SceneCamera';
 import { useSceneDebugLayer } from '@/scenes/debug/useSceneDebugLayer';
@@ -15,6 +15,10 @@ import type { DiscoveryWaveId } from '@/scenes/discovery/discoveryWaves';
 import { getCollectiblesForWave } from '@/scenes/discovery/discoveryWaves';
 import LetterCollectibles from '@/scenes/discovery/LetterCollectibles';
 import Environment from '@/scenes/environment/Environment';
+import {
+	isTenerifeFullIslandMode,
+	shouldUseTenerifeFullIslandNativeDeviceRatio,
+} from '@/scenes/environment/tenerifeFullIslandConfig';
 import {
 	getTenerifePlayerResetPosition,
 	TENERIFE_PLAYER_START_POSITION,
@@ -38,6 +42,11 @@ import '@babylonjs/core/Physics/physicsEngineComponent';
 type PropsType = {
 	children?: React.ReactNode;
 };
+
+const PLAYER_SYNC_FRAME_INTERVAL_MS = 1000 / 30;
+const TENERIFE_FULL_ISLAND_PLAYER_SYNC_INTERVAL_MS = 250;
+const PLAYER_POSITION_SYNC_DISTANCE_SQUARED = 0.16;
+const TENERIFE_FULL_ISLAND_POSITION_SYNC_DISTANCE_SQUARED = 9;
 
 const getObjectiveLabel = (activeWaveId: DiscoveryWaveId | null): string => {
 	if (activeWaveId === 'starter') {
@@ -82,6 +91,7 @@ const MainScene: React.FC<PropsType> = () => {
 			z: TENERIFE_PLAYER_START_POSITION.z,
 		}),
 	);
+	const lastPlayerSyncAtRef = useRef(0);
 	const craftedWords = useGameStore(selectInventoryWords);
 	const isInventoryOpen = useGameStore(selectIsInventoryOpen);
 	const isTalentTreeOpen = useGameStore(selectIsTalentTreeOpen);
@@ -89,7 +99,10 @@ const MainScene: React.FC<PropsType> = () => {
 	const isTenerifeModeEnabled =
 		typeof window !== 'undefined' &&
 		new URLSearchParams(window.location.search).get('tenerife') === '1';
-	const commands = usePlayerInput(isGameplayInputEnabled);
+	const isFullIslandModeEnabled = isTenerifeFullIslandMode();
+	const shouldUseNativeDeviceRatio =
+		!isFullIslandModeEnabled || shouldUseTenerifeFullIslandNativeDeviceRatio();
+	const commands = usePlayerInput(isGameplayInputEnabled, false);
 
 	useSceneDebugLayer(sceneInstance);
 
@@ -143,18 +156,34 @@ const MainScene: React.FC<PropsType> = () => {
 		let animationFrameId = 0;
 
 		const syncNearbyCollectible = () => {
+			const now = performance.now();
+			const syncInterval = isFullIslandModeEnabled
+				? TENERIFE_FULL_ISLAND_PLAYER_SYNC_INTERVAL_MS
+				: PLAYER_SYNC_FRAME_INTERVAL_MS;
+
+			if (now - lastPlayerSyncAtRef.current < syncInterval) {
+				animationFrameId = requestAnimationFrame(syncNearbyCollectible);
+				return;
+			}
+
+			lastPlayerSyncAtRef.current = now;
+
 			const nextCollectible = findNearestCollectibleInRange(collectibles, playerMesh.absolutePosition);
 			const nextZone = getZoneForPosition({
 				x: playerMesh.absolutePosition.x,
 				z: playerMesh.absolutePosition.z,
 			});
+			const positionSyncDistanceSquared = isFullIslandModeEnabled
+				? TENERIFE_FULL_ISLAND_POSITION_SYNC_DISTANCE_SQUARED
+				: PLAYER_POSITION_SYNC_DISTANCE_SQUARED;
 
 			setNearbyCollectible((currentCollectible) =>
 				currentCollectible?.id === nextCollectible?.id ? currentCollectible : nextCollectible,
 			);
 			setCurrentZone((zone) => (zone.id === nextZone.id ? zone : nextZone));
 			setPlayerPosition((currentPosition) =>
-				Vector3.DistanceSquared(currentPosition, playerMesh.absolutePosition) < 0.16
+				Vector3.DistanceSquared(currentPosition, playerMesh.absolutePosition) <
+				positionSyncDistanceSquared
 					? currentPosition
 					: playerMesh.absolutePosition.clone(),
 			);
@@ -166,7 +195,7 @@ const MainScene: React.FC<PropsType> = () => {
 		return () => {
 			cancelAnimationFrame(animationFrameId);
 		};
-	}, [collectibles, playerMesh]);
+	}, [collectibles, isFullIslandModeEnabled, playerMesh]);
 
 	useEffect(() => {
 		const craftedStarterWord = STARTER_DISCOVERY_WORDS.some((word) => craftedWords.includes(word));
@@ -210,7 +239,7 @@ const MainScene: React.FC<PropsType> = () => {
 		<>
 			<Engine
 				antialias
-				adaptToDeviceRatio
+				adaptToDeviceRatio={shouldUseNativeDeviceRatio}
 				canvasId='babylon-canvas'
 				style={{ width: '100%', height: '100vh' }}
 			>

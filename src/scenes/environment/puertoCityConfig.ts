@@ -1,6 +1,6 @@
-export type PuertoRoadRenderMode = 'baked' | 'both' | 'mesh';
+export type PuertoRoadRenderMode = 'baked' | 'both' | 'mesh' | 'none';
 
-export type PuertoTerrainMode = 'island' | 'real';
+export type PuertoTerrainMode = 'island' | 'island-full' | 'real';
 
 export const PUERTO_CITY_TERRAIN_MODEL_URL =
 	'/models/environment/puerto-de-la-cruz-terrain.glb?v=2026-05-17-puerto-building-scale-pass';
@@ -8,7 +8,7 @@ export const PUERTO_CITY_ALBEDO_TEXTURE_URL = '/textures/tenerife/puerto-city-al
 export const PUERTO_CITY_ROAD_MASK_TEXTURE_URL = '/textures/tenerife/puerto-city-road-mask.png';
 
 const isRoadRenderMode = (value: string | null): value is PuertoRoadRenderMode =>
-	value === 'baked' || value === 'both' || value === 'mesh';
+	value === 'baked' || value === 'both' || value === 'mesh' || value === 'none';
 
 const getSearchParams = (search: string | undefined): URLSearchParams => {
 	if (typeof search === 'string') {
@@ -27,8 +27,13 @@ const getSearchParams = (search: string | undefined): URLSearchParams => {
  */
 export const getPuertoTerrainMode = (search?: string): PuertoTerrainMode => {
 	const params = getSearchParams(search);
+	const terrainMode = params.get('terrain');
 
-	return params.get('terrain') === 'real' ? 'real' : 'island';
+	if (terrainMode === 'real' || terrainMode === 'island-full') {
+		return terrainMode;
+	}
+
+	return 'island';
 };
 
 /**
@@ -45,7 +50,15 @@ export const getPuertoRoadRenderMode = (
 		return requestedMode;
 	}
 
-	return terrainMode === 'real' ? 'baked' : 'mesh';
+	if (terrainMode === 'real') {
+		return 'baked';
+	}
+
+	if (terrainMode === 'island-full') {
+		return 'none';
+	}
+
+	return 'mesh';
 };
 
 /**

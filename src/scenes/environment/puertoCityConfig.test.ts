@@ -15,9 +15,18 @@ describe('puertoCityConfig', () => {
 		expect(getPuertoTerrainMode('?tenerife=1&terrain=real')).toBe('real');
 	});
 
+	it('enables the full Tenerife island terrain with terrain=island-full', () => {
+		expect(getPuertoTerrainMode('?tenerife=1&terrain=island-full')).toBe('island-full');
+	});
+
 	it('defaults road meshes for the legacy island terrain', () => {
 		expect(getPuertoRoadRenderMode('island', '?tenerife=1')).toBe('mesh');
 		expect(shouldRenderRoadMeshes(getPuertoRoadRenderMode('island', '?tenerife=1'))).toBe(true);
+	});
+
+	it('defaults road meshes off for full island terrain until Puerto alignment is implemented', () => {
+		expect(getPuertoRoadRenderMode('island-full', '?tenerife=1&terrain=island-full')).toBe('none');
+		expect(shouldRenderRoadMeshes(getPuertoRoadRenderMode('island-full'))).toBe(false);
 	});
 
 	it('defaults baked roads for the real Puerto terrain', () => {

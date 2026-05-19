@@ -1,0 +1,157 @@
+{
+	"assetId": "tenerife-full-island",
+	"attribution": {
+		"author": "Unknown08tf",
+		"authorUrl": "https://sketchfab.com/Unknown08tf",
+		"license": "CC-BY-4.0",
+		"licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+		"sourceTitle": "Tenerife. Islas Canarias",
+		"sourceUrl": "https://sketchfab.com/3d-models/tenerife-islas-canarias-628865c6fe29460bb2f6a8ba8d223087"
+	},
+	"collisionStrategy": "visual-only first pass; use simplified static collider or height proxy before gameplay authority",
+	"combinedBounds": {
+		"max": [
+			20371.884765625,
+			37076.00390625,
+			3653.677734375
+		],
+		"min": [
+			-59077.13671875,
+			-29946.0,
+			-25.055505752563477
+		],
+		"size": [
+			79449.021484375,
+			67022.00390625,
+			3678.7332401275635
+		]
+	},
+	"runtime": {
+		"glbPath": "public/models/environment/tenerife-full-island-normalized.glb",
+		"lowGlbPath": "public/models/environment/tenerife-full-island-runtime-low.glb",
+		"sourcePath": "public/models/land/tenerife._islas_canarias.glb",
+		"terrainMode": "island-full"
+	},
+	"terrain": {
+		"approxTriangles": 24126,
+		"maxElevationMeters": 3653.677734375,
+		"minElevationMeters": -25.055505752563477,
+		"tileCount": 6,
+		"tiles": [
+			{
+				"bounds": {
+					"min": [
+						0.0,
+						0.0,
+						0.0
+					],
+					"max": [
+						0.0,
+						0.0,
+						0.0
+					]
+				},
+				"name": "tenerife-full-island-terrain-tile-00",
+				"polygons": 0,
+				"vertices": 0
+			},
+			{
+				"bounds": {
+					"min": [
+						-59077.13671875,
+						-23834.630859375,
+						-7.323251247406006
+					],
+					"max": [
+						-39724.265625,
+						14259.9580078125,
+						1840.6490478515625
+					]
+				},
+				"name": "tenerife-full-island-terrain-tile-01",
+				"polygons": 4232,
+				"vertices": 2277
+			},
+			{
+				"bounds": {
+					"min": [
+						-39929.45703125,
+						-29946.0,
+						-7.16363525390625
+					],
+					"max": [
+						-18333.939453125,
+						16908.302734375,
+						3653.677734375
+					]
+				},
+				"name": "tenerife-full-island-terrain-tile-02",
+				"polygons": 10440,
+				"vertices": 5384
+			},
+			{
+				"bounds": {
+					"min": [
+						-18541.650390625,
+						-22612.234375,
+						-7.533458709716797
+					],
+					"max": [
+						3059.72119140625,
+						34224.00390625,
+						2378.1943359375
+					]
+				},
+				"name": "tenerife-full-island-terrain-tile-03",
+				"polygons": 7506,
+				"vertices": 3925
+			},
+			{
+				"bounds": {
+					"min": [
+						3052.296142578125,
+						16501.130859375,
+						-25.055505752563477
+					],
+					"max": [
+						20371.884765625,
+						37076.00390625,
+						1006.5414428710938
+					]
+				},
+				"name": "tenerife-full-island-terrain-tile-04",
+				"polygons": 1948,
+				"vertices": 1071
+			},
+			{
+				"bounds": {
+					"min": [
+						0.0,
+						0.0,
+						0.0
+					],
+					"max": [
+						0.0,
+						0.0,
+						0.0
+					]
+				},
+				"name": "tenerife-full-island-terrain-tile-05",
+				"polygons": 0,
+				"vertices": 0
+			}
+		],
+		"vertices": 12657
+	},
+	"textureBudget": {
+		"sourceEmbeddedBaseColor": "8192x8192 PNG",
+		"runtimeBaseColor": "2048x2048",
+		"mipmaps": true
+	},
+	"normalization": {
+		"lowRuntimeDecimateRatio": 0.24,
+		"minRuntimeLandHeightMeters": 1.5,
+		"removedFlatSeaBackgroundFaces": true
+	},
+	"version": 1
+}

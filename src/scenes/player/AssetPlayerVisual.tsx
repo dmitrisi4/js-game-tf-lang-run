@@ -12,6 +12,11 @@ import '@babylonjs/loaders/glTF';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useBeforeRender, useScene } from 'react-babylonjs';
+import {
+	isTenerifeFullIslandMode,
+	isTenerifeFullIslandTerrainMeshName,
+} from '@/scenes/environment/tenerifeFullIslandConfig';
+import { getTenerifeFullIslandHeightAtPosition } from '@/scenes/environment/tenerifeFullIslandHeightfield';
 import { isRoofParkourBuildingMeshName } from './roofParkourController';
 
 const PLAYER_MODEL_ROOT_URL = '/models/hero/pumkinboy-rigged-animated-character/source/';
@@ -34,7 +39,12 @@ const FOOT_NODE_NAMES = ['Toe.l', 'Toe.r', 'Foot.l', 'Foot.r'];
 const PLAYER_VISUAL_GROUND_MESH_NAMES = new Set(['ground1', 'tenerife-seabed']);
 
 const isPlayerVisualGroundMeshName = (name: string): boolean =>
-	PLAYER_VISUAL_GROUND_MESH_NAMES.has(name) || isRoofParkourBuildingMeshName(name);
+	PLAYER_VISUAL_GROUND_MESH_NAMES.has(name) ||
+	isTenerifeFullIslandTerrainMeshName(name) ||
+	isRoofParkourBuildingMeshName(name);
+
+const getVisualSearch = (): string | undefined =>
+	typeof window === 'undefined' ? undefined : window.location.search;
 
 type PropsType = {
 	facingYawRef: React.RefObject<number>;
@@ -117,6 +127,18 @@ const getBodyAnchorForNodes = (
 };
 
 const getVisualFootAnchorPosition = (targetMesh: Mesh, scene: BabylonScene): Vector3 => {
+	if (isTenerifeFullIslandMode(getVisualSearch())) {
+		const heightfieldY = getTenerifeFullIslandHeightAtPosition(targetMesh.absolutePosition);
+
+		if (heightfieldY !== null) {
+			return new Vector3(
+				targetMesh.absolutePosition.x,
+				heightfieldY + PLAYER_VISUAL_GROUND_CLEARANCE,
+				targetMesh.absolutePosition.z,
+			);
+		}
+	}
+
 	const rayOrigin = targetMesh.absolutePosition.add(
 		new Vector3(0, PLAYER_VISUAL_GROUND_RAY_HEIGHT, 0),
 	);

@@ -50,6 +50,8 @@ const SceneCamera: React.FC<PropsType> = ({ isCameraInputEnabled, targetMesh }) 
 		}
 
 		const camera = new FreeCamera('camera1', new Vector3(0, 5, -10), scene);
+		camera.maxZ = 160000;
+		camera.minZ = 0.08;
 		camera.setTarget(Vector3.Zero());
 		scene.activeCamera = camera;
 		cameraRef.current = camera;
