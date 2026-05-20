@@ -2,7 +2,8 @@ import type { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import type React from 'react';
 import { useMemo, useState } from 'react';
 import type { CollectibleSpawnPoint } from '@/scenes/discovery/collectibleTypes';
-import { getWorldPopulationSummary, WORLD_HALF_EXTENT } from '@/scenes/environment/worldData';
+import { TENERIFE_FULL_ISLAND_MAP_DATA } from '@/scenes/environment/tenerifeFullIslandMapData';
+import { getWorldPopulationSummary } from '@/scenes/environment/worldData';
 import {
 	selectInventoryLetters,
 	selectInventoryWords,
@@ -12,6 +13,17 @@ import {
 	selectPlayerXp,
 } from '@/store/selectors';
 import { useGameStore } from '@/store/useGameStore';
+import {
+	getMapBounds,
+	getMapMode,
+	getPlayerMapPoint,
+	type MapBoundsType,
+	type MapModeType,
+	type MapPointType,
+	offsetWorldPointByMapPercent,
+	projectTenerifeGeoToFullIslandWorldPoint,
+	toMapPoint,
+} from './mapProjection';
 import './gameHud.css';
 
 type PropsType = {
@@ -24,13 +36,6 @@ type PropsType = {
 
 const worldSummary = getWorldPopulationSummary();
 
-type MapBounds = {
-	maxX: number;
-	maxZ: number;
-	minX: number;
-	minZ: number;
-};
-
 type MapMarker = {
 	id: string;
 	label: string;
@@ -38,25 +43,6 @@ type MapMarker = {
 	z: number;
 };
 
-type MapPoint = {
-	left: number;
-	top: number;
-};
-
-const TENERIFE_PREVIEW_SCALE = 30;
-const TENERIFE_CITY_ANCHOR = { x: -10, z: 0 };
-const TENERIFE_PUERTO_LOCAL_POSITION = { x: 6.25, z: 15.58 };
-const TENERIFE_ROOT_OFFSET = {
-	x: TENERIFE_CITY_ANCHOR.x - TENERIFE_PUERTO_LOCAL_POSITION.x * TENERIFE_PREVIEW_SCALE,
-	z: TENERIFE_CITY_ANCHOR.z - TENERIFE_PUERTO_LOCAL_POSITION.z * TENERIFE_PREVIEW_SCALE,
-};
-const TENERIFE_MAP_BOUNDS: MapBounds = { minX: -45, maxX: 42, minZ: -19, maxZ: 19.5 };
-const TENERIFE_FULL_ISLAND_MAP_BOUNDS: MapBounds = {
-	maxX: 1225,
-	maxZ: 1225,
-	minX: -1225,
-	minZ: -1225,
-};
 const TENERIFE_MAP_LAND_PATH =
 	'M 1.7 54.9 L 4.4 43.3 L 8.6 37.2 L 13.8 29.6 L 21.3 24.6 L 30.5 20.3 L 40.0 15.4 L 50.3 8.4 L 58.4 6.1 L 65.5 9.6 L 74.5 14.9 L 81.4 13.4 L 88.3 6.1 L 96.0 4.8 L 98.9 14.2 L 96.2 25.3 L 91.7 33.2 L 88.6 42.8 L 84.6 53.2 L 79.5 65.1 L 74.7 74.2 L 68.7 81.5 L 60.7 86.6 L 52.9 90.4 L 46.6 95.4 L 38.2 95.9 L 30.1 91.6 L 23.2 85.8 L 16.8 78.2 L 11.8 70.1 L 6.0 63.5 Z';
 const TENERIFE_MAP_RIDGE_PATH =
@@ -66,12 +52,6 @@ const TENERIFE_MAP_NORTH_ROUTE_PATH =
 const TENERIFE_MAP_SOUTH_ROUTE_PATH =
 	'M 88.5 31.1 L 75.9 59.5 L 44.8 95.4 L 35.1 88.4 L 24.7 80.8 L 6.9 51.9';
 const TENERIFE_MAP_TEIDE_ROUTE_PATH = 'M 55.5 9.9 L 50.8 18.0 L 45.5 47.8 L 44.8 95.4';
-const ARENA_MAP_BOUNDS: MapBounds = {
-	minX: -WORLD_HALF_EXTENT,
-	maxX: WORLD_HALF_EXTENT,
-	minZ: -WORLD_HALF_EXTENT,
-	maxZ: WORLD_HALF_EXTENT,
-};
 const TENERIFE_SETTLEMENT_MARKERS: MapMarker[] = [
 	{ id: 'puerto-de-la-cruz', label: 'Puerto de la Cruz', x: 6.25, z: 15.58 },
 	{ id: 'la-orotava', label: 'La Orotava', x: 2.2, z: 12.4 },
@@ -85,6 +65,49 @@ const TENERIFE_SETTLEMENT_MARKERS: MapMarker[] = [
 	{ id: 'adeje', label: 'Adeje', x: -20.5, z: -12.4 },
 	{ id: 'los-cristianos', label: 'Los Cristianos', x: -11.5, z: -15.4 },
 ];
+
+/** Projects a real city coordinate and applies small visual calibration for the current island mesh. */
+const projectFullIslandCityMarker = (
+	point: Parameters<typeof projectTenerifeGeoToFullIslandWorldPoint>[0],
+	offset?: Parameters<typeof offsetWorldPointByMapPercent>[1],
+): { x: number; z: number } => {
+	const worldPoint = projectTenerifeGeoToFullIslandWorldPoint(point);
+
+	return offset ? offsetWorldPointByMapPercent(worldPoint, offset) : worldPoint;
+};
+const TENERIFE_FULL_ISLAND_MARKERS: MapMarker[] = [
+	{
+		id: 'teide',
+		label: TENERIFE_FULL_ISLAND_MAP_DATA.landmarks.teide.label,
+		x: TENERIFE_FULL_ISLAND_MAP_DATA.landmarks.teide.x,
+		z: TENERIFE_FULL_ISLAND_MAP_DATA.landmarks.teide.z,
+	},
+	{
+		id: 'puerto-de-la-cruz-full',
+		label: 'Puerto de la Cruz',
+		...projectFullIslandCityMarker({ lat: 28.41397, lon: -16.54867 }, { top: -5 }),
+	},
+	{
+		id: 'santa-cruz-de-tenerife-full',
+		label: 'Santa Cruz de Tenerife',
+		...projectTenerifeGeoToFullIslandWorldPoint({ lat: 28.46824, lon: -16.25462 }),
+	},
+	{
+		id: 'los-realejos-full',
+		label: 'Los Realejos',
+		...projectTenerifeGeoToFullIslandWorldPoint({ lat: 28.36739, lon: -16.58335 }),
+	},
+	{
+		id: 'la-laguna-full',
+		label: 'La Laguna',
+		...projectTenerifeGeoToFullIslandWorldPoint({ lat: 28.4899, lon: -16.3232 }),
+	},
+	{
+		id: 'la-orotava-full',
+		label: 'La Orotava',
+		...projectFullIslandCityMarker({ lat: 28.39076, lon: -16.52309 }, { top: -5 }),
+	},
+];
 const ARENA_MARKERS: MapMarker[] = [
 	{ id: 'ember-camp', label: 'Ember Camp', x: -18, z: -12 },
 	{ id: 'north-grove', label: 'North Grove', x: 5, z: 43 },
@@ -92,48 +115,13 @@ const ARENA_MARKERS: MapMarker[] = [
 	{ id: 'west-ridge', label: 'West Ridge', x: -52, z: 8 },
 ];
 
-const clamp = (value: number, min: number, max: number): number =>
-	Math.min(max, Math.max(min, value));
-
-const toMapPoint = (x: number, z: number, bounds: MapBounds): MapPoint => ({
-	left: clamp(((x - bounds.minX) / (bounds.maxX - bounds.minX)) * 100, 1, 99),
-	top: clamp((1 - (z - bounds.minZ) / (bounds.maxZ - bounds.minZ)) * 100, 1, 99),
-});
-
-const getPlayerMapPoint = (
-	playerPosition: Vector3 | null,
-	isTenerifeModeEnabled: boolean,
-): MapPoint | null => {
-	if (!playerPosition) {
-		return null;
-	}
-
-	if (!isTenerifeModeEnabled) {
-		return toMapPoint(playerPosition.x, playerPosition.z, ARENA_MAP_BOUNDS);
-	}
-
-	if (
-		typeof window !== 'undefined' &&
-		new URLSearchParams(window.location.search).get('terrain') === 'island-full'
-	) {
-		return toMapPoint(playerPosition.x, playerPosition.z, TENERIFE_FULL_ISLAND_MAP_BOUNDS);
-	}
-
-	return toMapPoint(
-		(playerPosition.x - TENERIFE_ROOT_OFFSET.x) / TENERIFE_PREVIEW_SCALE,
-		(playerPosition.z - TENERIFE_ROOT_OFFSET.z) / TENERIFE_PREVIEW_SCALE,
-		TENERIFE_MAP_BOUNDS,
-	);
-};
-
 const MapSurface: React.FC<{
-	isTenerifeModeEnabled: boolean;
+	bounds: MapBoundsType;
+	mapMode: MapModeType;
 	markers: MapMarker[];
-	playerPoint: MapPoint | null;
+	playerPoint: MapPointType | null;
 	variant: 'mini' | 'full';
-}> = ({ isTenerifeModeEnabled, markers, playerPoint, variant }) => {
-	const bounds = isTenerifeModeEnabled ? TENERIFE_MAP_BOUNDS : ARENA_MAP_BOUNDS;
-
+}> = ({ bounds, mapMode, markers, playerPoint, variant }) => {
 	return (
 		<div className={`hud-map-surface hud-map-surface-${variant}`}>
 			<svg
@@ -143,7 +131,13 @@ const MapSurface: React.FC<{
 				focusable='false'
 				preserveAspectRatio='none'
 			>
-				{isTenerifeModeEnabled ? (
+				{mapMode === 'tenerife-full-island' ? (
+					<path
+						className='hud-map-land hud-map-land-generated'
+						d={TENERIFE_FULL_ISLAND_MAP_DATA.landPath}
+						fillRule='evenodd'
+					/>
+				) : mapMode === 'tenerife-preview' ? (
 					<>
 						<path className='hud-map-land' d={TENERIFE_MAP_LAND_PATH} />
 						<path className='hud-map-ridge' d={TENERIFE_MAP_RIDGE_PATH} />
@@ -214,7 +208,17 @@ const GameHud: React.FC<PropsType> = ({
 		{ key: '3', label: 'Craft', value: `${letters.length}` },
 		{ key: '4', label: 'Codex', value: `${words.length}` },
 	];
-	const mapMarkers = isTenerifeModeEnabled ? TENERIFE_SETTLEMENT_MARKERS : ARENA_MARKERS;
+	const mapMode = getMapMode(
+		isTenerifeModeEnabled,
+		typeof window === 'undefined' ? '' : window.location.search,
+	);
+	const mapBounds = getMapBounds(mapMode);
+	const mapMarkers =
+		mapMode === 'tenerife-full-island'
+			? TENERIFE_FULL_ISLAND_MARKERS
+			: mapMode === 'tenerife-preview'
+				? TENERIFE_SETTLEMENT_MARKERS
+				: ARENA_MARKERS;
 	const playerPoint = useMemo(
 		() => getPlayerMapPoint(playerPosition, isTenerifeModeEnabled),
 		[isTenerifeModeEnabled, playerPosition],
@@ -281,7 +285,8 @@ const GameHud: React.FC<PropsType> = ({
 					</button>
 				</div>
 				<MapSurface
-					isTenerifeModeEnabled={isTenerifeModeEnabled}
+					bounds={mapBounds}
+					mapMode={mapMode}
 					markers={mapMarkers}
 					playerPoint={playerPoint}
 					variant='mini'
@@ -306,7 +311,8 @@ const GameHud: React.FC<PropsType> = ({
 							</button>
 						</div>
 						<MapSurface
-							isTenerifeModeEnabled={isTenerifeModeEnabled}
+							bounds={mapBounds}
+							mapMode={mapMode}
 							markers={mapMarkers}
 							playerPoint={playerPoint}
 							variant='full'

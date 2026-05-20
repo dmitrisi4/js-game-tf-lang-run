@@ -22,6 +22,13 @@ type HeightfieldType = {
 	minZ: number;
 };
 
+export type TenerifeFullIslandHeightfieldBoundsType = {
+	maxX: number;
+	maxZ: number;
+	minX: number;
+	minZ: number;
+};
+
 let activeHeightfield: HeightfieldType | null = null;
 
 const clampIndex = (value: number, maxIndex: number): number =>
@@ -94,6 +101,21 @@ const fillHeightfieldGaps = (heights: Float32Array, cellCount: number): void => 
 export const clearTenerifeFullIslandHeightfield = (): void => {
 	activeHeightfield = null;
 };
+
+/** Returns the active full-island runtime bounds derived from Babylon world-space terrain vertices. */
+export const getTenerifeFullIslandHeightfieldBounds =
+	(): TenerifeFullIslandHeightfieldBoundsType | null => {
+		if (!activeHeightfield) {
+			return null;
+		}
+
+		return {
+			maxX: activeHeightfield.maxX,
+			maxZ: activeHeightfield.maxZ,
+			minX: activeHeightfield.minX,
+			minZ: activeHeightfield.minZ,
+		};
+	};
 
 /** Builds a compact terrain heightfield from the loaded full-island terrain meshes. */
 export const rebuildTenerifeFullIslandHeightfield = (meshes: AbstractMesh[]): void => {
