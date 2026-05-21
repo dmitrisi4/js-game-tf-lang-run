@@ -15,6 +15,7 @@ import '@babylonjs/loaders/glTF';
 import type React from 'react';
 import { useEffect, useRef } from 'react';
 import { useScene } from 'react-babylonjs';
+import { applyCollisionFilterToAggregate } from '@/scenes/physics/collisionLayers';
 import { TENERIFE_CITY_ANCHOR_POSITION } from './tenerifePreviewConfig';
 
 const TENERIFE_MODEL_ROOT_URL = '/models/environment/';
@@ -192,14 +193,15 @@ const TenerifeIslandPreview: React.FC<PropsType> = ({ havokPlugin, onReadyChange
 						mesh.computeWorldMatrix(true);
 
 						if (havokPlugin) {
-							physicsAggregatesRef.current.push(
-								new PhysicsAggregate(
-									mesh,
-									PhysicsShapeType.MESH,
-									{ mass: 0, restitution: 0.05, friction: 0.74 },
-									scene,
-								),
+							const terrainAggregate = new PhysicsAggregate(
+								mesh,
+								PhysicsShapeType.MESH,
+								{ mass: 0, restitution: 0.05, friction: 0.74 },
+								scene,
 							);
+
+							applyCollisionFilterToAggregate(terrainAggregate, 'ground');
+							physicsAggregatesRef.current.push(terrainAggregate);
 						}
 					}
 				}

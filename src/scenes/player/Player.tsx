@@ -16,6 +16,7 @@ import {
 	isTenerifeFullIslandTerrainMeshName,
 } from '@/scenes/environment/tenerifeFullIslandConfig';
 import { getTenerifeFullIslandHeightAtPosition } from '@/scenes/environment/tenerifeFullIslandHeightfield';
+import { applyCollisionFilterToBody } from '@/scenes/physics/collisionLayers';
 import AssetPlayerVisual from './AssetPlayerVisual';
 import type { PlayerInputCommands } from './inputTypes';
 import { resolveCameraRelativeMovement } from './PlayerController';
@@ -515,6 +516,29 @@ const Player: React.FC<PropsType> = ({
 			}
 		};
 	}, [scene]);
+
+	useEffect(() => {
+		if (!scene || !playerMesh || isFullIslandTraversalEnabled) {
+			return;
+		}
+
+		let observer: Observer<BabylonScene> | null = null;
+
+		observer = scene.onBeforeRenderObservable.add(() => {
+			if (!observer || !applyCollisionFilterToBody(playerMesh.physicsBody, 'player')) {
+				return;
+			}
+
+			scene.onBeforeRenderObservable.remove(observer);
+			observer = null;
+		});
+
+		return () => {
+			if (observer) {
+				scene.onBeforeRenderObservable.remove(observer);
+			}
+		};
+	}, [isFullIslandTraversalEnabled, playerMesh, scene]);
 
 	return (
 		<>

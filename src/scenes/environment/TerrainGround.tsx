@@ -11,6 +11,7 @@ import type { Scene } from '@babylonjs/core/scene';
 import type React from 'react';
 import { useEffect } from 'react';
 import { useScene } from 'react-babylonjs';
+import { applyCollisionFilterToAggregate } from '@/scenes/physics/collisionLayers';
 import { getTerrainHeightAt, getTerrainMaterialAt, TERRAIN_SUBDIVISIONS } from './terrainData';
 import { WORLD_SIZE } from './worldData';
 import type { TerrainMaterialKey } from './worldZones';
@@ -139,6 +140,8 @@ const TerrainGround: React.FC<PropsType> = ({ havokPlugin }) => {
 					scene,
 				)
 			: null;
+
+		applyCollisionFilterToAggregate(physicsAggregate, 'ground');
 
 		return () => {
 			physicsAggregate?.dispose();

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+	applyCollisionFilterToAggregate,
+	applyCollisionFilterToBody,
+	applyCollisionFilterToShape,
 	COLLISION_LAYERS,
 	type CollisionLayerName,
 	createCollisionMask,
@@ -35,5 +38,29 @@ describe('collisionLayers', () => {
 		const layerNames = Object.keys(COLLISION_LAYERS) as CollisionLayerName[];
 
 		expect(layerNames.every((layerName) => getDefaultCollisionMask(layerName) >= 0)).toBe(true);
+	});
+
+	it('applies project filters to a physics shape', () => {
+		const shape = { filterCollideMask: 0, filterMembershipMask: 0 };
+
+		expect(applyCollisionFilterToShape(shape, 'player')).toBe(true);
+		expect(shape.filterMembershipMask).toBe(COLLISION_LAYERS.player);
+		expect(shape.filterCollideMask).toBe(getDefaultCollisionMask('player'));
+	});
+
+	it('applies project filters through bodies and aggregates', () => {
+		const bodyShape = { filterCollideMask: 0, filterMembershipMask: 0 };
+		const aggregateShape = { filterCollideMask: 0, filterMembershipMask: 0 };
+
+		expect(applyCollisionFilterToBody({ shape: bodyShape }, 'ground')).toBe(true);
+		expect(applyCollisionFilterToAggregate({ shape: aggregateShape }, 'staticWorld')).toBe(true);
+		expect(bodyShape.filterMembershipMask).toBe(COLLISION_LAYERS.ground);
+		expect(aggregateShape.filterMembershipMask).toBe(COLLISION_LAYERS.staticWorld);
+	});
+
+	it('returns false when a physics shape is not ready yet', () => {
+		expect(applyCollisionFilterToShape(null, 'player')).toBe(false);
+		expect(applyCollisionFilterToBody({ shape: null }, 'player')).toBe(false);
+		expect(applyCollisionFilterToAggregate(undefined, 'player')).toBe(false);
 	});
 });

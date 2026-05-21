@@ -14,6 +14,19 @@ export type CollisionLayerName = keyof typeof COLLISION_LAYERS;
 
 export type CollisionLayerMask = number;
 
+type PhysicsFilterShapeType = {
+	filterCollideMask: number;
+	filterMembershipMask: number;
+};
+
+type PhysicsFilterBodyType = {
+	shape: PhysicsFilterShapeType | null | undefined;
+};
+
+type PhysicsFilterAggregateType = {
+	shape: PhysicsFilterShapeType | null | undefined;
+};
+
 export const DEFAULT_COLLISION_MASKS = {
 	ground:
 		COLLISION_LAYERS.player |
@@ -73,3 +86,33 @@ export const createCollisionMask = (layers: CollisionLayerName[]): CollisionLaye
 /** Returns the default interaction mask for a layer in the shared project collision registry. */
 export const getDefaultCollisionMask = (layer: CollisionLayerName): CollisionLayerMask =>
 	DEFAULT_COLLISION_MASKS[layer];
+
+/** Applies the shared project collision filters to a Havok physics shape. */
+export const applyCollisionFilterToShape = (
+	shape: PhysicsFilterShapeType | null | undefined,
+	layer: CollisionLayerName,
+	mask = getDefaultCollisionMask(layer),
+): boolean => {
+	if (!shape) {
+		return false;
+	}
+
+	shape.filterMembershipMask = COLLISION_LAYERS[layer];
+	shape.filterCollideMask = mask;
+
+	return true;
+};
+
+/** Applies collision filtering to a physics body once its shape is available. */
+export const applyCollisionFilterToBody = (
+	body: PhysicsFilterBodyType | null | undefined,
+	layer: CollisionLayerName,
+	mask = getDefaultCollisionMask(layer),
+): boolean => applyCollisionFilterToShape(body?.shape, layer, mask);
+
+/** Applies collision filtering to a PhysicsAggregate created imperatively. */
+export const applyCollisionFilterToAggregate = (
+	aggregate: PhysicsFilterAggregateType | null | undefined,
+	layer: CollisionLayerName,
+	mask = getDefaultCollisionMask(layer),
+): boolean => applyCollisionFilterToShape(aggregate?.shape, layer, mask);

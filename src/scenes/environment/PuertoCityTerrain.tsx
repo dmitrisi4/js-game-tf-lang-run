@@ -12,6 +12,7 @@ import '@babylonjs/loaders/glTF';
 import type React from 'react';
 import { useEffect, useRef } from 'react';
 import { useScene } from 'react-babylonjs';
+import { applyCollisionFilterToAggregate } from '@/scenes/physics/collisionLayers';
 import { PUERTO_CITY_ALBEDO_TEXTURE_URL, PUERTO_CITY_TERRAIN_MODEL_URL } from './puertoCityConfig';
 
 type PropsType = {
@@ -119,18 +120,23 @@ const PuertoCityTerrain: React.FC<PropsType> = ({ havokPlugin, onReadyChange }) 
 						{ friction: 0.78, mass: 0, restitution: 0.04 },
 						scene,
 					);
+					applyCollisionFilterToAggregate(physicsAggregateRef.current, 'ground');
 
 					buildingPhysicsAggregatesRef.current = buildingMeshes.map((buildingMesh) => {
 						buildingMesh.isPickable = true;
 						buildingMesh.checkCollisions = true;
 						buildingMesh.computeWorldMatrix(true);
 
-						return new PhysicsAggregate(
+						const buildingAggregate = new PhysicsAggregate(
 							buildingMesh,
 							PhysicsShapeType.MESH,
 							{ friction: 0.62, mass: 0, restitution: 0.01 },
 							scene,
 						);
+
+						applyCollisionFilterToAggregate(buildingAggregate, 'staticWorld');
+
+						return buildingAggregate;
 					});
 				}
 
