@@ -19,6 +19,7 @@ import {
 
 type PropsType = {
 	havokPlugin: HavokPlugin | null;
+	renderWaterVisuals?: boolean;
 };
 
 const SAFETY_PHYSICS_OPTIONS = { mass: 0, restitution: 0.02, friction: 0.62 };
@@ -38,6 +39,7 @@ const teleportPlayerToCity = (playerMesh: AbstractMesh, scene: Scene | null): vo
 	}
 
 	physicsBody.setPrestepType(PhysicsPrestepType.TELEPORT);
+	physicsBody.setTargetTransform(resetPosition, Quaternion.Identity());
 	physicsBody.setLinearVelocity(ZERO_VELOCITY);
 	physicsBody.setAngularVelocity(ZERO_VELOCITY);
 };
@@ -48,7 +50,7 @@ const teleportPlayerToCity = (playerMesh: AbstractMesh, scene: Scene | null): vo
  * @param {PropsType} props - Active physics plugin.
  * @returns {JSX.Element} Safety meshes for the preview island.
  */
-const TenerifeSafetyLayer: React.FC<PropsType> = ({ havokPlugin }) => {
+const TenerifeSafetyLayer: React.FC<PropsType> = ({ havokPlugin, renderWaterVisuals = true }) => {
 	const scene = useScene();
 
 	useBeforeRender(() => {
@@ -62,6 +64,10 @@ const TenerifeSafetyLayer: React.FC<PropsType> = ({ havokPlugin }) => {
 			teleportPlayerToCity(playerMesh, scene);
 		}
 	});
+
+	if (!renderWaterVisuals) {
+		return null;
+	}
 
 	const width = TENERIFE_WATER_BOUNDS.maxX - TENERIFE_WATER_BOUNDS.minX;
 	const depth = TENERIFE_WATER_BOUNDS.maxZ - TENERIFE_WATER_BOUNDS.minZ;

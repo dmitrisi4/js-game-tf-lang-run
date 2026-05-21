@@ -69,6 +69,7 @@ Notes:
 - Puerto road ribbons and placeholder buildings are disabled by default in `island-full` mode until alignment is calibrated.
 - The first temporary Puerto-relative spawn was too visually ambiguous and appeared near a flat edge/filler area. It was moved to the Teide-area terrain at about `x=-627, y=75, z=-12` runtime units for full-island visual QA.
 - The follow-up spawn pass now scans the imported terrain meshes' actual world bounds and raycasts a grid onto the island, selecting the highest valid terrain hit. This avoids axis/sign mistakes from the source GLB coordinate conversion.
+- The latest spawn pass restores the intended Puerto de la Cruz start. Full-island reset now raycasts at the calibrated Puerto marker position `x=441.53, z=-272.15`, searches nearby offsets if needed, and only falls back to the highest terrain hit when Puerto grounding fails.
 
 ## 3. Ocean And Safety
 
@@ -193,6 +194,10 @@ Verification notes:
 - Passed after input state churn reduction: `bunx biome check src/scenes/player/usePlayerInput.ts src/scenes/player/usePlayerInput.test.ts src/scenes/MainScene.tsx`.
 - Passed after input state churn reduction: `bun run test -- src/scenes/player/usePlayerInput.test.ts src/scenes/player/playerInputUtils.test.ts src/scenes/environment/tenerifeFullIslandConfig.test.ts src/scenes/environment/tenerifePreviewConfig.test.ts`.
 - Passed after input state churn reduction: `bun run build`.
+- Passed after Puerto full-island spawn pass: `bun run test -- src/scenes/environment/tenerifePreviewConfig.test.ts src/scenes/environment/tenerifeFullIslandConfig.test.ts`.
+- Passed after Puerto full-island spawn pass: `bunx biome check src/scenes/environment/tenerifeFullIslandConfig.ts src/scenes/environment/tenerifePreviewConfig.ts src/scenes/environment/tenerifePreviewConfig.test.ts`.
+- Passed after Puerto full-island spawn pass: `bun run build`.
+- Browser smoke after Puerto full-island spawn pass confirmed player marker at `left: 53.4282%; top: 64.9839%`, within `0.006%` of the Puerto de la Cruz marker.
 - `bun run check` still fails on pre-existing unrelated formatting/import issues in `src/store/selectors.test.ts`, `src/ui/InventoryOverlay.tsx`, and `src/ui/gameHud.css`.
 - Local HTTP smoke passed for `http://127.0.0.1:5174/?tenerife=1&terrain=island-full`.
 - Local HTTP smoke passed for `http://127.0.0.1:5174/models/environment/tenerife-full-island-normalized.glb?v=2026-05-18-land-cut-spawn-pass`.

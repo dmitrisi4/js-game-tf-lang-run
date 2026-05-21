@@ -6,6 +6,8 @@ import { isTenerifeFullIslandTerrainMeshName } from './tenerifeFullIslandConfig'
 
 const HEIGHTFIELD_RESOLUTION = 192;
 const EMPTY_HEIGHT = Number.NEGATIVE_INFINITY;
+const UNREACHED_SOURCE_DISTANCE = 65535;
+const MAX_SUPPORTED_SOURCE_DISTANCE_CELLS = 2;
 const NEIGHBOR_OFFSETS = [
 	[-1, 0],
 	[1, 0],
@@ -20,6 +22,7 @@ type HeightfieldType = {
 	maxZ: number;
 	minX: number;
 	minZ: number;
+	sourceDistances: Uint16Array;
 };
 
 export type TenerifeFullIslandHeightfieldBoundsType = {
@@ -27,6 +30,12 @@ export type TenerifeFullIslandHeightfieldBoundsType = {
 	maxZ: number;
 	minX: number;
 	minZ: number;
+};
+
+export type TenerifeFullIslandHeightfieldPointType = {
+	x: number;
+	y: number;
+	z: number;
 };
 
 let activeHeightfield: HeightfieldType | null = null;
@@ -46,13 +55,7 @@ const getTerrainMeshes = (meshes: AbstractMesh[]): Mesh[] =>
 			mesh.isEnabled(),
 	);
 
-const getTerrainBounds = (terrainMeshes: Mesh[]) => {
-	const points = terrainMeshes.flatMap((mesh) => {
-		mesh.computeWorldMatrix(true);
-
-		return mesh.getBoundingInfo().boundingBox.vectorsWorld;
-	});
-
+const getPointBounds = (points: TenerifeFullIslandHeightfieldPointType[]) => {
 	return {
 		maxX: Math.max(...points.map((point) => point.x)),
 		maxZ: Math.max(...points.map((point) => point.z)),
@@ -61,13 +64,18 @@ const getTerrainBounds = (terrainMeshes: Mesh[]) => {
 	};
 };
 
-const fillHeightfieldGaps = (heights: Float32Array, cellCount: number): void => {
+const fillHeightfieldGaps = (
+	heights: Float32Array,
+	sourceDistances: Uint16Array,
+	cellCount: number,
+): void => {
 	const queue: number[] = [];
 	let readIndex = 0;
 
 	for (let index = 0; index < heights.length; index += 1) {
 		if (heights[index] !== EMPTY_HEIGHT) {
 			queue.push(index);
+			sourceDistances[index] = 0;
 		}
 	}
 
@@ -92,6 +100,7 @@ const fillHeightfieldGaps = (heights: Float32Array, cellCount: number): void => 
 			}
 
 			heights[nextIndex] = heights[index];
+			sourceDistances[nextIndex] = sourceDistances[index] + 1;
 			queue.push(nextIndex);
 		}
 	}
@@ -117,6 +126,51 @@ export const getTenerifeFullIslandHeightfieldBounds =
 		};
 	};
 
+/** Builds a compact terrain heightfield from already resolved world-space terrain points. */
+export const createTenerifeFullIslandHeightfieldFromPoints = (
+	points: TenerifeFullIslandHeightfieldPointType[],
+	cellCount = HEIGHTFIELD_RESOLUTION,
+): HeightfieldType | null => {
+	if (points.length === 0 || cellCount < 2) {
+		return null;
+	}
+
+	const bounds = getPointBounds(points);
+
+	if (bounds.maxX === bounds.minX || bounds.maxZ === bounds.minZ) {
+		return null;
+	}
+
+	const maxIndex = cellCount - 1;
+	const heights = new Float32Array(cellCount * cellCount);
+	const sourceDistances = new Uint16Array(cellCount * cellCount);
+	heights.fill(EMPTY_HEIGHT);
+	sourceDistances.fill(UNREACHED_SOURCE_DISTANCE);
+
+	for (const point of points) {
+		const xIndex = clampIndex(
+			((point.x - bounds.minX) / (bounds.maxX - bounds.minX)) * maxIndex,
+			maxIndex,
+		);
+		const zIndex = clampIndex(
+			((point.z - bounds.minZ) / (bounds.maxZ - bounds.minZ)) * maxIndex,
+			maxIndex,
+		);
+		const cellIndex = getCellIndex(xIndex, zIndex, cellCount);
+
+		heights[cellIndex] = Math.max(heights[cellIndex], point.y);
+	}
+
+	fillHeightfieldGaps(heights, sourceDistances, cellCount);
+
+	return {
+		...bounds,
+		cellCount,
+		heights,
+		sourceDistances,
+	};
+};
+
 /** Builds a compact terrain heightfield from the loaded full-island terrain meshes. */
 export const rebuildTenerifeFullIslandHeightfield = (meshes: AbstractMesh[]): void => {
 	const terrainMeshes = getTerrainMeshes(meshes);
@@ -126,11 +180,7 @@ export const rebuildTenerifeFullIslandHeightfield = (meshes: AbstractMesh[]): vo
 		return;
 	}
 
-	const bounds = getTerrainBounds(terrainMeshes);
-	const cellCount = HEIGHTFIELD_RESOLUTION;
-	const maxIndex = cellCount - 1;
-	const heights = new Float32Array(cellCount * cellCount);
-	heights.fill(EMPTY_HEIGHT);
+	const worldPoints: TenerifeFullIslandHeightfieldPointType[] = [];
 
 	for (const mesh of terrainMeshes) {
 		const positions = mesh.getVerticesData(VertexBuffer.PositionKind);
@@ -146,57 +196,63 @@ export const rebuildTenerifeFullIslandHeightfield = (meshes: AbstractMesh[]): vo
 				new Vector3(positions[index], positions[index + 1], positions[index + 2]),
 				worldMatrix,
 			);
-			const xIndex = clampIndex(
-				((worldPosition.x - bounds.minX) / (bounds.maxX - bounds.minX)) * maxIndex,
-				maxIndex,
-			);
-			const zIndex = clampIndex(
-				((worldPosition.z - bounds.minZ) / (bounds.maxZ - bounds.minZ)) * maxIndex,
-				maxIndex,
-			);
-			const cellIndex = getCellIndex(xIndex, zIndex, cellCount);
 
-			heights[cellIndex] = Math.max(heights[cellIndex], worldPosition.y);
+			worldPoints.push(worldPosition);
 		}
 	}
 
-	fillHeightfieldGaps(heights, cellCount);
-	activeHeightfield = {
-		...bounds,
-		cellCount,
-		heights,
-	};
+	activeHeightfield = createTenerifeFullIslandHeightfieldFromPoints(worldPoints);
 };
 
-/** Resolves the approximate full-island terrain height at a runtime world position. */
-export const getTenerifeFullIslandHeightAtPosition = ({ x, z }: Vector3): number | null => {
-	if (
-		!activeHeightfield ||
-		x < activeHeightfield.minX ||
-		x > activeHeightfield.maxX ||
-		z < activeHeightfield.minZ ||
-		z > activeHeightfield.maxZ
-	) {
+/** Resolves a height from a specific heightfield while rejecting large filled gaps. */
+export const sampleTenerifeFullIslandHeightfield = (
+	heightfield: HeightfieldType,
+	{ x, z }: Vector3,
+): number | null => {
+	if (x < heightfield.minX || x > heightfield.maxX || z < heightfield.minZ || z > heightfield.maxZ) {
 		return null;
 	}
 
-	const maxIndex = activeHeightfield.cellCount - 1;
-	const xRatio =
-		((x - activeHeightfield.minX) / (activeHeightfield.maxX - activeHeightfield.minX)) * maxIndex;
-	const zRatio =
-		((z - activeHeightfield.minZ) / (activeHeightfield.maxZ - activeHeightfield.minZ)) * maxIndex;
+	const maxIndex = heightfield.cellCount - 1;
+	const xRatio = ((x - heightfield.minX) / (heightfield.maxX - heightfield.minX)) * maxIndex;
+	const zRatio = ((z - heightfield.minZ) / (heightfield.maxZ - heightfield.minZ)) * maxIndex;
 	const x0 = clampIndex(xRatio, maxIndex);
 	const z0 = clampIndex(zRatio, maxIndex);
 	const x1 = Math.min(x0 + 1, maxIndex);
 	const z1 = Math.min(z0 + 1, maxIndex);
 	const tx = xRatio - x0;
 	const tz = zRatio - z0;
-	const height00 = activeHeightfield.heights[getCellIndex(x0, z0, activeHeightfield.cellCount)];
-	const height10 = activeHeightfield.heights[getCellIndex(x1, z0, activeHeightfield.cellCount)];
-	const height01 = activeHeightfield.heights[getCellIndex(x0, z1, activeHeightfield.cellCount)];
-	const height11 = activeHeightfield.heights[getCellIndex(x1, z1, activeHeightfield.cellCount)];
+	const cellCount = heightfield.cellCount;
+	const index00 = getCellIndex(x0, z0, cellCount);
+	const index10 = getCellIndex(x1, z0, cellCount);
+	const index01 = getCellIndex(x0, z1, cellCount);
+	const index11 = getCellIndex(x1, z1, cellCount);
+	const nearestSourceDistance = Math.min(
+		heightfield.sourceDistances[index00],
+		heightfield.sourceDistances[index10],
+		heightfield.sourceDistances[index01],
+		heightfield.sourceDistances[index11],
+	);
+
+	if (nearestSourceDistance > MAX_SUPPORTED_SOURCE_DISTANCE_CELLS) {
+		return null;
+	}
+
+	const height00 = heightfield.heights[index00];
+	const height10 = heightfield.heights[index10];
+	const height01 = heightfield.heights[index01];
+	const height11 = heightfield.heights[index11];
 	const height0 = height00 + (height10 - height00) * tx;
 	const height1 = height01 + (height11 - height01) * tx;
 
 	return height0 + (height1 - height0) * tz;
+};
+
+/** Resolves the approximate full-island terrain height at a runtime world position. */
+export const getTenerifeFullIslandHeightAtPosition = (position: Vector3): number | null => {
+	if (!activeHeightfield) {
+		return null;
+	}
+
+	return sampleTenerifeFullIslandHeightfield(activeHeightfield, position);
 };

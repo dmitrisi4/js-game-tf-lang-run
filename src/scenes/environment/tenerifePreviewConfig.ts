@@ -16,6 +16,21 @@ export const TENERIFE_PLAYER_GROUND_LIFT = 1.35;
 const TENERIFE_FULL_ISLAND_SPAWN_GRID_SEGMENTS = 14;
 const TENERIFE_FULL_ISLAND_SPAWN_RAY_MARGIN = 160;
 const TENERIFE_FULL_ISLAND_SPAWN_MIN_GROUND_Y = 1;
+const TENERIFE_FULL_ISLAND_PUERTO_SPAWN_SEARCH_OFFSETS = [
+	{ x: 0, z: 0 },
+	{ x: 36, z: 0 },
+	{ x: -36, z: 0 },
+	{ x: 0, z: 36 },
+	{ x: 0, z: -36 },
+	{ x: 72, z: 0 },
+	{ x: -72, z: 0 },
+	{ x: 0, z: 72 },
+	{ x: 0, z: -72 },
+	{ x: 72, z: 72 },
+	{ x: -72, z: 72 },
+	{ x: 72, z: -72 },
+	{ x: -72, z: -72 },
+] as const;
 export const TENERIFE_WATER_SURFACE_Y = -8;
 export const TENERIFE_SEABED_Y = -12.5;
 export const TENERIFE_DEEP_WATER_RESET_Y = -10.6;
@@ -45,7 +60,7 @@ const getTenerifeSearch = (): string | undefined =>
 const isGroundResetTarget = (meshName: string): boolean =>
 	meshName === 'ground1' || isTenerifeFullIslandTerrainMeshName(meshName);
 
-type Bounds2DType = {
+export type FullIslandGroundBoundsType = {
 	maxX: number;
 	maxY: number;
 	maxZ: number;
@@ -53,8 +68,13 @@ type Bounds2DType = {
 	minZ: number;
 };
 
+export type FullIslandGroundSamplerType = {
+	getBounds: () => FullIslandGroundBoundsType | null;
+	pickGroundAt: (bounds: FullIslandGroundBoundsType, x: number, z: number) => Vector3 | null;
+};
+
 /** Calculates runtime world bounds from the imported full-island terrain meshes. */
-const getFullIslandRuntimeBounds = (scene: Scene): Bounds2DType | null => {
+const getFullIslandRuntimeBounds = (scene: Scene): FullIslandGroundBoundsType | null => {
 	const bounds = scene.meshes
 		.filter(
 			(mesh) =>
@@ -82,17 +102,71 @@ const getFullIslandRuntimeBounds = (scene: Scene): Bounds2DType | null => {
 	};
 };
 
-/** Finds a guaranteed terrain-backed spawn point from the imported island mesh itself. */
-const getFullIslandTerrainSpawnPosition = (scene: Scene): Vector3 | null => {
-	const bounds = getFullIslandRuntimeBounds(scene);
+const getFullIslandGroundHitAt = (
+	scene: Scene,
+	bounds: FullIslandGroundBoundsType,
+	x: number,
+	z: number,
+): Vector3 | null => {
+	const rayY = bounds.maxY + TENERIFE_FULL_ISLAND_SPAWN_RAY_MARGIN;
+	const rayLength = rayY + TENERIFE_FULL_ISLAND_SPAWN_RAY_MARGIN;
+	const groundHit = scene.pickWithRay(
+		new Ray(new Vector3(x, rayY, z), Vector3.DownReadOnly, rayLength),
+		(mesh) => isTenerifeFullIslandTerrainMeshName(mesh.name) && mesh.isEnabled() && mesh.isPickable,
+	);
+
+	if (
+		!groundHit?.hit ||
+		!groundHit.pickedPoint ||
+		groundHit.pickedPoint.y < TENERIFE_FULL_ISLAND_SPAWN_MIN_GROUND_Y
+	) {
+		return null;
+	}
+
+	return groundHit.pickedPoint.clone();
+};
+
+const createFullIslandSceneGroundSampler = (scene: Scene): FullIslandGroundSamplerType => ({
+	getBounds: () => getFullIslandRuntimeBounds(scene),
+	pickGroundAt: (bounds, x, z) => getFullIslandGroundHitAt(scene, bounds, x, z),
+});
+
+/** Finds a terrain-backed Puerto spawn point from the imported island mesh itself. */
+export const getFullIslandPuertoSpawnPositionFromSampler = (
+	sampler: FullIslandGroundSamplerType,
+): Vector3 | null => {
+	const bounds = sampler.getBounds();
+
+	if (!bounds) {
+		return null;
+	}
+
+	for (const offset of TENERIFE_FULL_ISLAND_PUERTO_SPAWN_SEARCH_OFFSETS) {
+		const groundPoint = sampler.pickGroundAt(
+			bounds,
+			TENERIFE_FULL_ISLAND_PUERTO_START_POSITION.x + offset.x,
+			TENERIFE_FULL_ISLAND_PUERTO_START_POSITION.z + offset.z,
+		);
+
+		if (groundPoint) {
+			return new Vector3(groundPoint.x, groundPoint.y + TENERIFE_PLAYER_GROUND_LIFT, groundPoint.z);
+		}
+	}
+
+	return null;
+};
+
+/** Finds a guaranteed terrain-backed QA fallback from the imported island mesh itself. */
+export const getFullIslandHighestTerrainSpawnPositionFromSampler = (
+	sampler: FullIslandGroundSamplerType,
+): Vector3 | null => {
+	const bounds = sampler.getBounds();
 
 	if (!bounds) {
 		return null;
 	}
 
 	let bestPoint: Vector3 | null = null;
-	const rayY = bounds.maxY + TENERIFE_FULL_ISLAND_SPAWN_RAY_MARGIN;
-	const rayLength = rayY + TENERIFE_FULL_ISLAND_SPAWN_RAY_MARGIN;
 
 	for (let xIndex = 0; xIndex <= TENERIFE_FULL_ISLAND_SPAWN_GRID_SEGMENTS; xIndex += 1) {
 		const x =
@@ -101,35 +175,25 @@ const getFullIslandTerrainSpawnPosition = (scene: Scene): Vector3 | null => {
 		for (let zIndex = 0; zIndex <= TENERIFE_FULL_ISLAND_SPAWN_GRID_SEGMENTS; zIndex += 1) {
 			const z =
 				bounds.minZ + ((bounds.maxZ - bounds.minZ) * zIndex) / TENERIFE_FULL_ISLAND_SPAWN_GRID_SEGMENTS;
-			const groundHit = scene.pickWithRay(
-				new Ray(new Vector3(x, rayY, z), Vector3.DownReadOnly, rayLength),
-				(mesh) => isTenerifeFullIslandTerrainMeshName(mesh.name) && mesh.isEnabled() && mesh.isPickable,
-			);
+			const groundPoint = sampler.pickGroundAt(bounds, x, z);
 
-			if (
-				!groundHit?.hit ||
-				!groundHit.pickedPoint ||
-				groundHit.pickedPoint.y < TENERIFE_FULL_ISLAND_SPAWN_MIN_GROUND_Y
-			) {
-				continue;
-			}
-
-			if (!bestPoint || groundHit.pickedPoint.y > bestPoint.y) {
-				bestPoint = groundHit.pickedPoint.clone();
+			if (groundPoint && (!bestPoint || groundPoint.y > bestPoint.y)) {
+				bestPoint = groundPoint;
 			}
 		}
 	}
 
-	if (!bestPoint) {
-		return null;
-	}
-
-	return new Vector3(bestPoint.x, bestPoint.y + TENERIFE_PLAYER_GROUND_LIFT, bestPoint.z);
+	return bestPoint
+		? new Vector3(bestPoint.x, bestPoint.y + TENERIFE_PLAYER_GROUND_LIFT, bestPoint.z)
+		: null;
 };
 
 /** Keeps island edges soft while still recovering the player from deep water or runaway physics. */
-export const shouldResetTenerifePlayer = ({ x, y, z }: TenerifePositionLike): boolean => {
-	if (isTenerifeFullIslandMode(getTenerifeSearch())) {
+export const shouldResetTenerifePlayer = (
+	{ x, y, z }: TenerifePositionLike,
+	search = getTenerifeSearch(),
+): boolean => {
+	if (isTenerifeFullIslandMode(search)) {
 		return (
 			y < TENERIFE_FULL_ISLAND_DEEP_WATER_RESET_Y ||
 			x < TENERIFE_FULL_ISLAND_PLAYABLE_BOUNDS.minX ||
@@ -149,8 +213,11 @@ export const shouldResetTenerifePlayer = ({ x, y, z }: TenerifePositionLike): bo
 };
 
 /** Resolves the current Tenerife respawn point by raycasting onto the active terrain mode. */
-export const getTenerifePlayerResetPosition = (scene: Scene | null | undefined): Vector3 => {
-	const fallbackPosition = isTenerifeFullIslandMode(getTenerifeSearch())
+export const getTenerifePlayerResetPosition = (
+	scene: Scene | null | undefined,
+	search = getTenerifeSearch(),
+): Vector3 => {
+	const fallbackPosition = isTenerifeFullIslandMode(search)
 		? TENERIFE_FULL_ISLAND_PUERTO_START_POSITION.clone()
 		: TENERIFE_PLAYER_START_POSITION.clone();
 
@@ -158,8 +225,14 @@ export const getTenerifePlayerResetPosition = (scene: Scene | null | undefined):
 		return fallbackPosition;
 	}
 
-	if (isTenerifeFullIslandMode(getTenerifeSearch())) {
-		return getFullIslandTerrainSpawnPosition(scene) ?? fallbackPosition;
+	if (isTenerifeFullIslandMode(search)) {
+		const fullIslandSampler = createFullIslandSceneGroundSampler(scene);
+
+		return (
+			getFullIslandPuertoSpawnPositionFromSampler(fullIslandSampler) ??
+			getFullIslandHighestTerrainSpawnPositionFromSampler(fullIslandSampler) ??
+			fallbackPosition
+		);
 	}
 
 	const groundHit = scene.pickWithRay(
