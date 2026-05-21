@@ -17,6 +17,7 @@ import {
 	isTenerifeFullIslandTerrainMeshName,
 } from '@/scenes/environment/tenerifeFullIslandConfig';
 import { getTenerifeFullIslandHeightAtPosition } from '@/scenes/environment/tenerifeFullIslandHeightfield';
+import { resolvePlayerAnimationState, selectPlayerAnimationGroup } from './playerAnimationRegistry';
 import { isRoofParkourBuildingMeshName } from './roofParkourController';
 
 const PLAYER_MODEL_ROOT_URL = '/models/hero/pumkinboy-rigged-animated-character/source/';
@@ -403,30 +404,17 @@ const AssetPlayerVisual: React.FC<PropsType> = ({
 			return;
 		}
 
-		const findAnimationGroup = (patterns: string[]): AnimationGroup | null => {
-			const normalizedPatterns = patterns.map((pattern) => pattern.toLowerCase());
-
-			return (
-				animationGroups.find((animationGroup) => {
-					const normalizedName = animationGroup.name.toLowerCase();
-					return normalizedPatterns.some((pattern) => normalizedName.includes(pattern));
-				}) ?? null
-			);
-		};
-
 		const hasPendingJumpAnimationRequest =
 			jumpAnimationRequestId !== lastJumpAnimationRequestIdRef.current;
-		const shouldPlayJumpAnimation = isAirborne || hasPendingJumpAnimationRequest;
-		const targetAnimation =
-			(shouldPlayJumpAnimation ? findAnimationGroup(['jump']) : null) ??
-			(isSprinting && USE_IMPORTED_LOCOMOTION_ANIMATION
-				? findAnimationGroup(['sprint', 'run'])
-				: null) ??
-			(isMoving && USE_IMPORTED_LOCOMOTION_ANIMATION
-				? findAnimationGroup(['walk', 'move', 'run'])
-				: null) ??
-			findAnimationGroup(['idle']) ??
-			animationGroups[0];
+		const targetState = resolvePlayerAnimationState({
+			hasPendingJumpAnimationRequest,
+			isAirborne,
+			isMoving,
+			isSprinting,
+			useImportedLocomotionAnimation: USE_IMPORTED_LOCOMOTION_ANIMATION,
+		});
+		const shouldPlayJumpAnimation = targetState === 'jump';
+		const targetAnimation = selectPlayerAnimationGroup(animationGroups, targetState);
 
 		if (
 			!targetAnimation ||
