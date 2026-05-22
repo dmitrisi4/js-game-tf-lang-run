@@ -4,7 +4,9 @@ import {
 	isTenerifeFullIslandTerrainMeshName,
 	shouldRenderPuertoOnFullIsland,
 	shouldUseTenerifeFullIslandNativeDeviceRatio,
+	TENERIFE_FULL_ISLAND_DEEP_WATER_RESET_Y,
 	TENERIFE_FULL_ISLAND_TEIDE_POSITION,
+	TENERIFE_FULL_ISLAND_WATER_SURFACE_Y,
 } from './tenerifeFullIslandConfig';
 
 describe('tenerifeFullIslandConfig', () => {
@@ -34,5 +36,12 @@ describe('tenerifeFullIslandConfig', () => {
 
 	it('records Teide as terrain-scale elevation instead of a backdrop-only marker', () => {
 		expect(TENERIFE_FULL_ISLAND_TEIDE_POSITION.y).toBeGreaterThan(70);
+	});
+
+	it('keeps visual sea level below coastal player grounding but above deep-water reset', () => {
+		expect(TENERIFE_FULL_ISLAND_WATER_SURFACE_Y).toBeLessThan(-20);
+		expect(TENERIFE_FULL_ISLAND_WATER_SURFACE_Y).toBeGreaterThan(
+			TENERIFE_FULL_ISLAND_DEEP_WATER_RESET_Y,
+		);
 	});
 });

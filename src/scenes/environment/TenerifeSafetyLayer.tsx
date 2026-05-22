@@ -9,6 +9,7 @@ import type { HavokPlugin } from '@babylonjs/core/Physics/v2/Plugins/havokPlugin
 import type { Scene } from '@babylonjs/core/scene';
 import type React from 'react';
 import { useBeforeRender, useScene } from 'react-babylonjs';
+import OceanSurface from './OceanSurface';
 import {
 	getTenerifePlayerResetPosition,
 	shouldResetTenerifePlayer,
@@ -76,22 +77,12 @@ const TenerifeSafetyLayer: React.FC<PropsType> = ({ havokPlugin, renderWaterVisu
 
 	return (
 		<>
-			<box
+			<OceanSurface
+				bounds={TENERIFE_WATER_BOUNDS}
 				name='tenerife-water-surface'
-				position={new Vector3(centerX, TENERIFE_WATER_SURFACE_Y, centerZ)}
-				scaling={new Vector3(width, 0.04, depth)}
-				size={1}
-				onCreated={(mesh) => {
-					mesh.isPickable = false;
-				}}
-			>
-				<standardMaterial
-					name='tenerife-water-material'
-					alpha={0.62}
-					diffuseColor={Color3.FromHexString('#2f91b9')}
-					specularColor={Color3.FromHexString('#b9eef8')}
-				/>
-			</box>
+				opacity={0.68}
+				surfaceY={TENERIFE_WATER_SURFACE_Y}
+			/>
 			<box
 				name='tenerife-seabed'
 				position={new Vector3(centerX, TENERIFE_SEABED_Y, centerZ)}

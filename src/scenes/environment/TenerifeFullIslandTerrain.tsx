@@ -9,6 +9,11 @@ import type React from 'react';
 import { useEffect, useRef } from 'react';
 import { useScene } from 'react-babylonjs';
 import {
+	auditFullIslandImportedWaterMeshes,
+	shouldHideImportedWater,
+	updateOceanDebugState,
+} from '@/scenes/environment/ocean/oceanDebug';
+import {
 	isTenerifeFullIslandTerrainMeshName,
 	TENERIFE_FULL_ISLAND_MODEL_URL,
 	TENERIFE_FULL_ISLAND_RUNTIME_SCALE,
@@ -68,6 +73,13 @@ const TenerifeFullIslandTerrain: React.FC<PropsType> = ({ onReadyChange }) => {
 				}
 
 				importedMeshesRef.current = result.meshes;
+				const waterMeshAudit = auditFullIslandImportedWaterMeshes(
+					result.meshes,
+					shouldHideImportedWater(),
+				);
+				updateOceanDebugState({
+					lastAudit: waterMeshAudit,
+				});
 
 				for (const mesh of result.meshes) {
 					mesh.isPickable = false;
