@@ -2,7 +2,7 @@ import type { AssetContainer, InstantiatedEntries } from '@babylonjs/core/assetC
 import { Ray } from '@babylonjs/core/Culling/ray';
 import { LoadAssetContainerAsync } from '@babylonjs/core/Loading/sceneLoader';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
-import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { Mesh } from '@babylonjs/core/Meshes/mesh';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { PhysicsShapeType } from '@babylonjs/core/Physics/v2/IPhysicsEnginePlugin';
@@ -10,8 +10,8 @@ import type { HavokPlugin } from '@babylonjs/core/Physics/v2/Plugins/havokPlugin
 import type { Scene as BabylonScene } from '@babylonjs/core/scene';
 import '@babylonjs/loaders/OBJ';
 import type React from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useBeforeRender, useScene } from 'react-babylonjs';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useScene } from 'react-babylonjs';
 import { finishTenerifePerfTimer, startTenerifePerfTimer } from './tenerifePerformance';
 import { getTerrainHeightAt } from './terrainData';
 import type { WorldBuilding, WorldBuildingModelId } from './worldData';
@@ -22,14 +22,6 @@ type PropsType = {
 	groundMeshName?: string;
 	havokPlugin: HavokPlugin | null;
 	onReadyChange?: (isReady: boolean) => void;
-	positionOffset?: { x: number; z: number };
-};
-
-type WorldBuildingViewPropsType = {
-	building: WorldBuilding;
-	groundMeshName?: string;
-	havokPlugin: HavokPlugin | null;
-	onSettledChange?: (buildingId: string, isSettled: boolean) => void;
 	positionOffset?: { x: number; z: number };
 };
 
@@ -102,10 +94,7 @@ const getRootMeshes = (rootNode: TransformNode): Mesh[] => {
 	return meshes;
 };
 
-const normalizeImportedRootsToAnchor = (
-	rootNodes: TransformNode[],
-	anchor: TransformNode,
-): void => {
+const normalizeImportedRootsToZeroY = (rootNodes: TransformNode[]): void => {
 	let minimumWorldY = Number.POSITIVE_INFINITY;
 
 	for (const rootNode of rootNodes) {
@@ -122,10 +111,8 @@ const normalizeImportedRootsToAnchor = (
 		return;
 	}
 
-	const verticalOffset = (anchor.position.y - minimumWorldY) / anchor.scaling.y;
-
 	for (const rootNode of rootNodes) {
-		rootNode.position.y += verticalOffset;
+		rootNode.position.y -= minimumWorldY;
 	}
 };
 
@@ -160,25 +147,12 @@ const BuildingFallback: React.FC<{
 	);
 };
 
-/**
- * Loads a static building visual from the January 2019 OBJ building pack.
- *
- * @param {WorldBuildingViewPropsType} props - Static building placement and physics props.
- * @returns {JSX.Element} The building visual with a primitive collider.
- */
-const WorldBuildingView: React.FC<WorldBuildingViewPropsType> = ({
-	building,
-	groundMeshName,
-	havokPlugin,
-	onSettledChange,
-	positionOffset = { x: 0, z: 0 },
-}) => {
-	const scene = useScene();
-	const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
-	const anchorRef = useRef<TransformNode | null>(null);
-	const instantiatedEntriesRef = useRef<InstantiatedEntries | null>(null);
-	const hasAlignedToGroundRef = useRef(false);
-	const { collider, heightOffset = 0, id, modelId, position, scale, yaw } = building;
+const BuildingCollider: React.FC<{
+	building: WorldBuilding;
+	havokPlugin: HavokPlugin | null;
+	positionOffset?: { x: number; z: number };
+}> = ({ building, havokPlugin, positionOffset = { x: 0, z: 0 } }) => {
+	const { collider, heightOffset = 0, id, position, yaw } = building;
 	const x = position.x + positionOffset.x;
 	const z = position.z + positionOffset.z;
 	const colliderPosition = new Vector3(
@@ -187,9 +161,43 @@ const WorldBuildingView: React.FC<WorldBuildingViewPropsType> = ({
 		z,
 	);
 
+	return (
+		<box
+			name={`${id}-collider`}
+			size={1}
+			position={colliderPosition}
+			rotation={new Vector3(0, yaw, 0)}
+			scaling={new Vector3(collider.width, collider.height, collider.depth)}
+			onCreated={(mesh) => {
+				mesh.isPickable = false;
+				mesh.isVisible = false;
+			}}
+		>
+			{havokPlugin && (
+				<physicsAggregate type={PhysicsShapeType.BOX} _options={BUILDING_PHYSICS_OPTIONS} />
+			)}
+		</box>
+	);
+};
+
+/**
+ * Manages Thin Instances for a specific building model type.
+ */
+const WorldBuildingModelManager: React.FC<{
+	modelId: WorldBuildingModelId;
+	buildings: WorldBuilding[];
+	groundMeshName?: string;
+	positionOffset?: { x: number; z: number };
+	onSettledChange: (modelId: string, isSettled: boolean) => void;
+}> = ({ modelId, buildings, groundMeshName, positionOffset = { x: 0, z: 0 }, onSettledChange }) => {
+	const scene = useScene();
+	const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+	const anchorRef = useRef<TransformNode | null>(null);
+	const instantiatedEntriesRef = useRef<InstantiatedEntries | null>(null);
+
 	useEffect(() => {
-		onSettledChange?.(id, status !== 'loading');
-	}, [id, onSettledChange, status]);
+		onSettledChange(modelId, false);
+	}, [modelId, onSettledChange]);
 
 	useEffect(() => {
 		if (!scene) {
@@ -210,7 +218,6 @@ const WorldBuildingView: React.FC<WorldBuildingViewPropsType> = ({
 		};
 
 		setStatus('loading');
-		hasAlignedToGroundRef.current = false;
 
 		getBuildingAssetContainer(scene, modelId)
 			.then((assetContainer) => {
@@ -218,38 +225,49 @@ const WorldBuildingView: React.FC<WorldBuildingViewPropsType> = ({
 					return;
 				}
 
-				const anchor = new TransformNode(`${id}-anchor`, scene);
-				anchor.position = new Vector3(x, getTerrainHeightAt({ x, z }) + heightOffset, z);
-				anchor.rotation.y = yaw;
-				anchor.scaling.setAll(scale);
-				anchorRef.current = anchor;
+				const anchorName = `building-manager-anchor-${modelId}`;
+				const anchor = scene.getTransformNodeByName(anchorName) as TransformNode | null;
+				const nextAnchor = anchor ?? new TransformNode(anchorName, scene);
+				anchorRef.current = nextAnchor;
 
 				const instantiatedEntries = assetContainer.instantiateModelsToScene(
-					(sourceName) => `${id}-${sourceName}`,
+					(sourceName) => `${modelId}-base-${sourceName}`,
 					false,
 				);
 				instantiatedEntriesRef.current = instantiatedEntries;
 
 				for (const rootNode of instantiatedEntries.rootNodes) {
 					if (rootNode instanceof TransformNode) {
-						rootNode.parent = anchor;
+						rootNode.parent = nextAnchor;
 						disablePickingForImportedRoot(rootNode);
 					}
 				}
 
-				normalizeImportedRootsToAnchor(
+				normalizeImportedRootsToZeroY(
 					instantiatedEntries.rootNodes.filter(
 						(rootNode): rootNode is TransformNode => rootNode instanceof TransformNode,
 					),
-					anchor,
 				);
+
+				for (const rootNode of instantiatedEntries.rootNodes) {
+					for (const mesh of rootNode.getChildMeshes(false)) {
+						if (mesh instanceof Mesh) {
+							mesh.isVisible = false;
+							mesh.doNotSyncBoundingInfo = true;
+						}
+					}
+					if (rootNode instanceof Mesh) {
+						rootNode.isVisible = false;
+						rootNode.doNotSyncBoundingInfo = true;
+					}
+				}
+
 				setStatus('ready');
 			})
 			.catch(() => {
 				if (isDisposed) {
 					return;
 				}
-
 				disposeImportedResources();
 				setStatus('error');
 			});
@@ -258,46 +276,94 @@ const WorldBuildingView: React.FC<WorldBuildingViewPropsType> = ({
 			isDisposed = true;
 			disposeImportedResources();
 		};
-	}, [heightOffset, id, modelId, scale, scene, x, yaw, z]);
+	}, [modelId, scene]);
 
-	useBeforeRender(() => {
-		if (!scene || !groundMeshName || !anchorRef.current || hasAlignedToGroundRef.current) {
+	useEffect(() => {
+		if (status !== 'ready' || !scene || !instantiatedEntriesRef.current) {
 			return;
 		}
 
-		const groundHit = scene.pickWithRay(
-			new Ray(new Vector3(x, 200, z), Vector3.DownReadOnly, 400),
-			(mesh) => mesh.name === groundMeshName && mesh.isEnabled() && mesh.isPickable,
-		);
+		let animationFrameId = 0;
 
-		if (!groundHit?.hit || !groundHit.pickedPoint) {
-			return;
-		}
+		const trySettleBuildings = () => {
+			// If a ground mesh is specified, wait for it to be pickable
+			if (groundMeshName) {
+				const ground = scene.getMeshByName(groundMeshName);
+				if (!ground?.isEnabled() || !ground.isPickable) {
+					animationFrameId = requestAnimationFrame(trySettleBuildings);
+					return;
+				}
+			}
 
-		anchorRef.current.position.y = groundHit.pickedPoint.y + heightOffset;
-		hasAlignedToGroundRef.current = true;
-	});
+			const count = buildings.length;
+			const matrixBuffer = new Float32Array(count * 16);
+
+			for (let i = 0; i < count; i++) {
+				const b = buildings[i];
+				const x = b.position.x + positionOffset.x;
+				const z = b.position.z + positionOffset.z;
+				let y = getTerrainHeightAt({ x, z }) + (b.heightOffset ?? 0);
+
+				if (groundMeshName) {
+					const ground = scene.getMeshByName(groundMeshName);
+					if (ground) {
+						const groundHit = scene.pickWithRay(
+							new Ray(new Vector3(x, 200, z), Vector3.DownReadOnly, 400),
+							(mesh) => mesh === ground,
+						);
+						if (groundHit?.hit && groundHit.pickedPoint) {
+							y = groundHit.pickedPoint.y + (b.heightOffset ?? 0);
+						}
+					}
+				}
+
+				const matrix = Matrix.Compose(
+					new Vector3(b.scale, b.scale, b.scale),
+					Quaternion.RotationYawPitchRoll(b.yaw, 0, 0),
+					new Vector3(x, y, z),
+				);
+				matrix.copyToArray(matrixBuffer, i * 16);
+			}
+
+			for (const rootNode of instantiatedEntriesRef.current?.rootNodes ?? []) {
+				for (const mesh of rootNode.getChildMeshes(false)) {
+					if (mesh instanceof Mesh && mesh.getTotalVertices() > 0) {
+						mesh.thinInstanceSetBuffer('matrix', matrixBuffer, 16, false);
+					}
+				}
+				if (rootNode instanceof Mesh && rootNode.getTotalVertices() > 0) {
+					rootNode.thinInstanceSetBuffer('matrix', matrixBuffer, 16, false);
+				}
+			}
+
+			onSettledChange(modelId, true);
+		};
+
+		trySettleBuildings();
+
+		return () => {
+			cancelAnimationFrame(animationFrameId);
+		};
+	}, [
+		status,
+		buildings,
+		groundMeshName,
+		modelId,
+		onSettledChange,
+		positionOffset.x,
+		positionOffset.z,
+		scene,
+	]);
+
+	if (status === 'ready') {
+		return null;
+	}
 
 	return (
 		<>
-			{status !== 'ready' ? (
-				<BuildingFallback building={building} positionOffset={positionOffset} />
-			) : null}
-			<box
-				name={`${id}-collider`}
-				size={1}
-				position={colliderPosition}
-				rotation={new Vector3(0, yaw, 0)}
-				scaling={new Vector3(collider.width, collider.height, collider.depth)}
-				onCreated={(mesh) => {
-					mesh.isPickable = false;
-					mesh.isVisible = false;
-				}}
-			>
-				{havokPlugin && (
-					<physicsAggregate type={PhysicsShapeType.BOX} _options={BUILDING_PHYSICS_OPTIONS} />
-				)}
-			</box>
+			{buildings.map((building) => (
+				<BuildingFallback key={building.id} building={building} positionOffset={positionOffset} />
+			))}
 		</>
 	);
 };
@@ -316,19 +382,29 @@ const WorldBuildings: React.FC<PropsType> = ({
 	onReadyChange,
 	positionOffset,
 }) => {
-	const [settledBuildingIds, setSettledBuildingIds] = useState<Set<string>>(() => new Set());
+	const [settledModelIds, setSettledModelIds] = useState<Set<string>>(() => new Set());
 	const settlementStartedAtRef = useRef<number | null>(null);
 	const hasReportedSettlementRef = useRef(false);
 
+	const groupedBuildings = useMemo(() => {
+		const groups = new Map<WorldBuildingModelId, WorldBuilding[]>();
+		for (const building of buildings) {
+			const group = groups.get(building.modelId) ?? [];
+			group.push(building);
+			groups.set(building.modelId, group);
+		}
+		return groups;
+	}, [buildings]);
+
 	useEffect(() => {
-		setSettledBuildingIds(new Set());
+		setSettledModelIds(new Set());
 		settlementStartedAtRef.current = startTenerifePerfTimer();
 		hasReportedSettlementRef.current = false;
 		onReadyChange?.(buildings.length === 0);
 	}, [buildings, onReadyChange]);
 
 	useEffect(() => {
-		const isReady = buildings.length === 0 || settledBuildingIds.size >= buildings.length;
+		const isReady = buildings.length === 0 || settledModelIds.size >= groupedBuildings.size;
 
 		if (isReady && debugLabel && !hasReportedSettlementRef.current) {
 			finishTenerifePerfTimer(
@@ -339,31 +415,32 @@ const WorldBuildings: React.FC<PropsType> = ({
 		}
 
 		onReadyChange?.(isReady);
-	}, [buildings.length, debugLabel, onReadyChange, settledBuildingIds]);
-
-	const handleSettledChange = useCallback((buildingId: string, isSettled: boolean) => {
-		setSettledBuildingIds((currentIds) => {
-			const nextIds = new Set(currentIds);
-
-			if (isSettled) {
-				nextIds.add(buildingId);
-			} else {
-				nextIds.delete(buildingId);
-			}
-
-			return nextIds;
-		});
-	}, []);
+	}, [buildings.length, debugLabel, groupedBuildings.size, onReadyChange, settledModelIds]);
 
 	return (
 		<>
-			{buildings.map((building) => (
-				<WorldBuildingView
-					key={building.id}
-					building={building}
+			{Array.from(groupedBuildings.entries()).map(([modelId, groupBuildings]) => (
+				<WorldBuildingModelManager
+					key={modelId}
+					modelId={modelId}
+					buildings={groupBuildings}
 					groundMeshName={groundMeshName}
+					positionOffset={positionOffset}
+					onSettledChange={(id, isSettled) => {
+						setSettledModelIds((current) => {
+							const next = new Set(current);
+							if (isSettled) next.add(id);
+							else next.delete(id);
+							return next;
+						});
+					}}
+				/>
+			))}
+			{buildings.map((building) => (
+				<BuildingCollider
+					key={`${building.id}-collider`}
+					building={building}
 					havokPlugin={havokPlugin}
-					onSettledChange={handleSettledChange}
 					positionOffset={positionOffset}
 				/>
 			))}
