@@ -121,6 +121,7 @@ Tasks:
 - [x] Keep full GLB/PBR quality but make native device pixel ratio opt-in for full-island mode with `render=retina`.
 - [x] Stop repeated keydown events and unused pointer look deltas from causing React state churn during movement/camera control.
 - [x] Disable Babylon pointer-move picking in full-island mode to avoid mouse camera movement raycasting against the island.
+- [x] Fix Puerto-area full-island player grounding so the visual model stands on the rendered terrain instead of heightfield-biased air.
 - [ ] Test player grounding near Puerto.
 - [ ] Test steep terrain behavior on Teide approach.
 - [ ] Verify water reset from coastal fall.
@@ -198,6 +199,12 @@ Verification notes:
 - Passed after Puerto full-island spawn pass: `bunx biome check src/scenes/environment/tenerifeFullIslandConfig.ts src/scenes/environment/tenerifePreviewConfig.ts src/scenes/environment/tenerifePreviewConfig.test.ts`.
 - Passed after Puerto full-island spawn pass: `bun run build`.
 - Browser smoke after Puerto full-island spawn pass confirmed player marker at `left: 53.4282%; top: 64.9839%`, within `0.006%` of the Puerto de la Cruz marker.
+- Passed after Puerto full-island grounding fix: `/Users/dmytrosichkar/.bun/bin/bun run test -- src/scenes/player/Player.test.ts src/scenes/player/playerCapsuleMetrics.test.ts src/scenes/environment/tenerifeFullIslandConfig.test.ts`.
+- Passed after Puerto full-island grounding fix: `/Users/dmytrosichkar/.bun/bin/bunx biome check src/scenes/player/Player.tsx src/scenes/player/AssetPlayerVisual.tsx src/scenes/player/Player.test.ts TASKS/full-tenerife-island-integration/tasks.md`.
+- Passed after Puerto full-island grounding fix: `/Users/dmytrosichkar/.bun/bin/bun run build` with the existing Vite large chunk warning.
+- Local HTTP smoke after Puerto full-island grounding fix returned `200 OK` for `http://127.0.0.1:5173/?tenerife=1&terrain=island-full`.
+- Browser MCP visual screenshot was not run because the Browser plugin's Node REPL execution tool was not available after tool discovery in this session.
+- Still failing after Puerto full-island grounding fix: `/Users/dmytrosichkar/.bun/bin/bun run check` on the pre-existing unrelated Biome issues in `src/store/selectors.test.ts`, `src/ui/InventoryOverlay.tsx`, and `src/ui/gameHud.css`.
 - `bun run check` still fails on pre-existing unrelated formatting/import issues in `src/store/selectors.test.ts`, `src/ui/InventoryOverlay.tsx`, and `src/ui/gameHud.css`.
 - Local HTTP smoke passed for `http://127.0.0.1:5174/?tenerife=1&terrain=island-full`.
 - Local HTTP smoke passed for `http://127.0.0.1:5174/models/environment/tenerife-full-island-normalized.glb?v=2026-05-18-land-cut-spawn-pass`.
