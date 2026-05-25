@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { getOceanSurfaceMetrics, getOceanWaveScale } from './oceanVisualConfig';
+import {
+	getOceanMaterialConfig,
+	getOceanSurfaceMetrics,
+	getOceanWaveScale,
+	getShorelineDepthGradientConfig,
+	getShorelineSurfConfig,
+} from './oceanVisualConfig';
 
 describe('oceanVisualConfig', () => {
 	it('resolves centered ocean mesh metrics from world bounds', () => {
@@ -27,5 +33,38 @@ describe('oceanVisualConfig', () => {
 
 	it('scales wave frequency with island-sized water surfaces', () => {
 		expect(getOceanWaveScale(2800, 2600)).toBeCloseTo(51.85, 2);
+	});
+
+	it('resolves bounded water material waves for island-sized surfaces', () => {
+		const config = getOceanMaterialConfig(2800, 2600);
+
+		expect(config.waveHeight).toBeLessThanOrEqual(0.72);
+		expect(config.waveHeight).toBeGreaterThan(0.18);
+		expect(config.waveLength).toBeCloseTo(37.33, 2);
+		expect(config.waveCount).toBeGreaterThan(12);
+		expect(config.colorBlendFactor).toBeLessThan(config.colorBlendFactor2);
+		expect(config.colorBlendFactor2).toBeGreaterThanOrEqual(0.68);
+	});
+
+	it('resolves a shoreline depth ramp inside the ocean footprint', () => {
+		const config = getShorelineDepthGradientConfig(2800, 2600);
+
+		expect(config.edgeRadiusX).toBeLessThan(1400);
+		expect(config.edgeRadiusZ).toBeLessThan(1300);
+		expect(config.foamWidth).toBeGreaterThan(20);
+		expect(config.shallowEnd).toBeGreaterThan(config.foamWidth);
+		expect(config.deepStart).toBeGreaterThan(config.shallowEnd);
+	});
+
+	it('resolves animated surf bands inside the shallow-water zone', () => {
+		const depthConfig = getShorelineDepthGradientConfig(2800, 2600);
+		const surfConfig = getShorelineSurfConfig(2800, 2600);
+
+		expect(surfConfig.edgeRadiusX).toBe(depthConfig.edgeRadiusX);
+		expect(surfConfig.edgeRadiusZ).toBe(depthConfig.edgeRadiusZ);
+		expect(surfConfig.bandSpacing).toBeGreaterThan(20);
+		expect(surfConfig.surfWidth).toBeGreaterThan(surfConfig.bandSpacing);
+		expect(surfConfig.surfWidth).toBeLessThan(depthConfig.shallowEnd);
+		expect(surfConfig.retreatSpeed).toBeGreaterThan(0);
 	});
 });

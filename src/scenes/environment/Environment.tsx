@@ -99,7 +99,9 @@ const Environment: React.FC<PropsType> = ({ havokPlugin, onReadyChange }) => {
 					) : (
 						<TenerifeIslandPreview havokPlugin={havokPlugin} onReadyChange={setIsTenerifeIslandReady} />
 					)}
-					{isFullIslandTerrainEnabled ? <TenerifeOcean havokPlugin={havokPlugin} /> : null}
+					{isFullIslandTerrainEnabled && isTenerifeIslandReady ? (
+						<TenerifeOcean havokPlugin={havokPlugin} />
+					) : null}
 					<TenerifeSafetyLayer
 						havokPlugin={havokPlugin}
 						renderWaterVisuals={!isFullIslandTerrainEnabled}

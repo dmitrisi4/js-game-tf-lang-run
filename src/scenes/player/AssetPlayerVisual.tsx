@@ -15,10 +15,18 @@ import { useBeforeRender, useScene } from 'react-babylonjs';
 import {
 	isTenerifeFullIslandMode,
 	isTenerifeFullIslandTerrainMeshName,
+	TENERIFE_FULL_ISLAND_WATER_SURFACE_Y,
 } from '@/scenes/environment/tenerifeFullIslandConfig';
 import { getTenerifeFullIslandHeightAtPosition } from '@/scenes/environment/tenerifeFullIslandHeightfield';
 import { resolvePlayerAnimationState, selectPlayerAnimationGroup } from './playerAnimationRegistry';
 import { isRoofParkourBuildingMeshName } from './roofParkourController';
+import { getPlayerWaterState } from './waterInteraction';
+import { createPlayerWaterLine, type PlayerWaterLineType } from './waterLineEffect';
+import {
+	createIdleWaterRipple,
+	createWaterMovementWake,
+	type WaterMovementWakeType,
+} from './waterMovementWaves';
 
 const PLAYER_MODEL_ROOT_URL = '/models/hero/pumkinboy-rigged-animated-character/source/';
 const PLAYER_MODEL_FILENAME = 'Pumpkinboy_10Animations.glb';
@@ -50,6 +58,7 @@ const getVisualSearch = (): string | undefined =>
 type PropsType = {
 	facingYawRef: React.RefObject<number>;
 	isAirborne: boolean;
+	isInWater: boolean;
 	isMoving: boolean;
 	isSprinting: boolean;
 	jumpAnimationRequestId: number;
@@ -127,17 +136,23 @@ const getBodyAnchorForNodes = (
 	return { centerX, centerZ, minY };
 };
 
-const getVisualFootAnchorPosition = (targetMesh: Mesh, scene: BabylonScene): Vector3 => {
-	if (isTenerifeFullIslandMode(getVisualSearch())) {
-		const heightfieldY = getTenerifeFullIslandHeightAtPosition(targetMesh.absolutePosition);
+const getVisualFootAnchorPosition = (
+	targetMesh: Mesh,
+	scene: BabylonScene,
+	isInWater: boolean,
+): Vector3 => {
+	if (isInWater && isTenerifeFullIslandMode(getVisualSearch())) {
+		const waterState = getPlayerWaterState({
+			floorY: Number.NEGATIVE_INFINITY,
+			timeSeconds: performance.now() * 0.001,
+			waterSurfaceY: TENERIFE_FULL_ISLAND_WATER_SURFACE_Y,
+		});
 
-		if (heightfieldY !== null) {
-			return new Vector3(
-				targetMesh.absolutePosition.x,
-				heightfieldY + PLAYER_VISUAL_GROUND_CLEARANCE,
-				targetMesh.absolutePosition.z,
-			);
-		}
+		return new Vector3(
+			targetMesh.absolutePosition.x,
+			waterState.visualAnchorY + PLAYER_VISUAL_GROUND_CLEARANCE,
+			targetMesh.absolutePosition.z,
+		);
 	}
 
 	const rayOrigin = targetMesh.absolutePosition.add(
@@ -154,6 +169,18 @@ const getVisualFootAnchorPosition = (targetMesh: Mesh, scene: BabylonScene): Vec
 			groundHit.pickedPoint.y + PLAYER_VISUAL_GROUND_CLEARANCE,
 			targetMesh.absolutePosition.z,
 		);
+	}
+
+	if (isTenerifeFullIslandMode(getVisualSearch())) {
+		const heightfieldY = getTenerifeFullIslandHeightAtPosition(targetMesh.absolutePosition);
+
+		if (heightfieldY !== null) {
+			return new Vector3(
+				targetMesh.absolutePosition.x,
+				heightfieldY + PLAYER_VISUAL_GROUND_CLEARANCE,
+				targetMesh.absolutePosition.z,
+			);
+		}
 	}
 
 	return new Vector3(
@@ -201,6 +228,7 @@ const stripRootMotion = (animationGroup: AnimationGroup): void => {
 const AssetPlayerVisual: React.FC<PropsType> = ({
 	facingYawRef,
 	isAirborne,
+	isInWater,
 	isMoving,
 	isSprinting,
 	jumpAnimationRequestId,
@@ -218,6 +246,14 @@ const AssetPlayerVisual: React.FC<PropsType> = ({
 	const activeAnimationNameRef = useRef<string | null>(null);
 	const lastJumpAnimationRequestIdRef = useRef(0);
 	const fallbackMeshRef = useRef<Mesh | null>(null);
+	const isInWaterRef = useRef(isInWater);
+	const isMovingRef = useRef(isMoving);
+	const waterLineRef = useRef<PlayerWaterLineType | null>(null);
+	const waterWakeRef = useRef<WaterMovementWakeType | null>(null);
+	const idleRippleIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+	isInWaterRef.current = isInWater;
+	isMovingRef.current = isMoving;
 
 	useBeforeRender(() => {
 		if (status !== 'error' || !targetMesh || !fallbackMeshRef.current) {
@@ -241,6 +277,16 @@ const AssetPlayerVisual: React.FC<PropsType> = ({
 				scene.onBeforeRenderObservable.remove(syncObserver);
 				syncObserver = null;
 			}
+
+			// Dispose water surface effects
+			if (idleRippleIntervalRef.current !== null) {
+				clearInterval(idleRippleIntervalRef.current);
+				idleRippleIntervalRef.current = null;
+			}
+			waterLineRef.current?.dispose();
+			waterLineRef.current = null;
+			waterWakeRef.current?.dispose();
+			waterWakeRef.current = null;
 
 			for (const mesh of importedMeshesRef.current) {
 				if (!mesh.isDisposed()) {
@@ -302,13 +348,22 @@ const AssetPlayerVisual: React.FC<PropsType> = ({
 				}
 
 				const anchor = new TransformNode(`player-visual-anchor-${targetMesh.uniqueId}`, scene);
-				anchor.position.copyFrom(getVisualFootAnchorPosition(targetMesh, scene));
+				anchor.position.copyFrom(getVisualFootAnchorPosition(targetMesh, scene, isInWaterRef.current));
 				anchorRef.current = anchor;
 				syncObserver = scene.onBeforeRenderObservable.add(() => {
-					anchor.position.copyFrom(getVisualFootAnchorPosition(targetMesh, scene));
+					anchor.position.copyFrom(getVisualFootAnchorPosition(targetMesh, scene, isInWaterRef.current));
 					anchor.rotationQuaternion = null;
 					anchor.rotation.copyFromFloats(0, 0, 0);
 					orientationRoot.rotation.y = (facingYawRef.current ?? 0) + PLAYER_MODEL_FORWARD_OFFSET;
+
+					// Sync water surface effects to player XZ each frame
+					if (isInWaterRef.current) {
+						const px = targetMesh.absolutePosition.x;
+						const pz = targetMesh.absolutePosition.z;
+						waterLineRef.current?.setPosition(px, pz);
+						waterWakeRef.current?.setPosition(px, pz, facingYawRef.current ?? 0);
+						waterWakeRef.current?.setActive(isMovingRef.current);
+					}
 				});
 
 				const orientationRoot = new TransformNode(
@@ -392,6 +447,60 @@ const AssetPlayerVisual: React.FC<PropsType> = ({
 			disposeImportedResources();
 		};
 	}, [facingYawRef, scene, targetMesh]);
+
+	/**
+	 * Manages water surface effects lifecycle: creates waterline disc and wake system
+	 * on first entry, shows/hides them as isInWater changes, and manages the idle
+	 * ripple interval while the player stands still in water.
+	 */
+	useEffect(() => {
+		if (!scene || !targetMesh) {
+			return;
+		}
+
+		const waterSurfaceY = TENERIFE_FULL_ISLAND_WATER_SURFACE_Y;
+
+		if (isInWater) {
+			// Lazily create water effects on first entry
+			if (!waterLineRef.current) {
+				waterLineRef.current = createPlayerWaterLine(scene, waterSurfaceY);
+			}
+
+			if (!waterWakeRef.current) {
+				waterWakeRef.current = createWaterMovementWake(scene, waterSurfaceY);
+			}
+
+			waterLineRef.current.setPosition(targetMesh.absolutePosition.x, targetMesh.absolutePosition.z);
+			waterWakeRef.current.setPosition(
+				targetMesh.absolutePosition.x,
+				targetMesh.absolutePosition.z,
+				0,
+			);
+			waterLineRef.current.setVisible(true);
+			waterWakeRef.current.setActive(isMoving);
+
+			// Idle ripple interval — only while not moving
+			if (!isMoving && idleRippleIntervalRef.current === null) {
+				idleRippleIntervalRef.current = setInterval(() => {
+					if (!scene.isDisposed) {
+						const pos = targetMesh.absolutePosition;
+						createIdleWaterRipple(scene, new Vector3(pos.x, waterSurfaceY, pos.z));
+					}
+				}, 700);
+			} else if (isMoving && idleRippleIntervalRef.current !== null) {
+				clearInterval(idleRippleIntervalRef.current);
+				idleRippleIntervalRef.current = null;
+			}
+		} else {
+			waterLineRef.current?.setVisible(false);
+			waterWakeRef.current?.setActive(false);
+
+			if (idleRippleIntervalRef.current !== null) {
+				clearInterval(idleRippleIntervalRef.current);
+				idleRippleIntervalRef.current = null;
+			}
+		}
+	}, [isInWater, isMoving, scene, targetMesh]);
 
 	useEffect(() => {
 		if (status !== 'ready') {

@@ -4,9 +4,9 @@ export const TENERIFE_FULL_ISLAND_MODEL_URL =
 	'/models/environment/tenerife-full-island-normalized.glb?v=2026-05-19-restored-full';
 export const TENERIFE_FULL_ISLAND_TERRAIN_PREFIX = 'tenerife-full-island-terrain-tile-';
 export const TENERIFE_FULL_ISLAND_RUNTIME_SCALE = 0.02;
-export const TENERIFE_FULL_ISLAND_WATER_SURFACE_Y = -24;
-export const TENERIFE_FULL_ISLAND_SEABED_Y = -32;
-export const TENERIFE_FULL_ISLAND_DEEP_WATER_RESET_Y = -28;
+export const TENERIFE_FULL_ISLAND_WATER_SURFACE_Y = -3.75;
+export const TENERIFE_FULL_ISLAND_SEABED_Y = -12.5;
+export const TENERIFE_FULL_ISLAND_DEEP_WATER_RESET_Y = -10.6;
 export const TENERIFE_FULL_ISLAND_OCEAN_SIZE = 2800;
 export const TENERIFE_FULL_ISLAND_PLAYABLE_BOUNDS = {
 	maxX: 1320,

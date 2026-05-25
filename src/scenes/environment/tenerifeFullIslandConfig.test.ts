@@ -39,7 +39,7 @@ describe('tenerifeFullIslandConfig', () => {
 	});
 
 	it('keeps visual sea level below coastal player grounding but above deep-water reset', () => {
-		expect(TENERIFE_FULL_ISLAND_WATER_SURFACE_Y).toBeLessThan(-20);
+		expect(TENERIFE_FULL_ISLAND_WATER_SURFACE_Y).toBeLessThan(0);
 		expect(TENERIFE_FULL_ISLAND_WATER_SURFACE_Y).toBeGreaterThan(
 			TENERIFE_FULL_ISLAND_DEEP_WATER_RESET_Y,
 		);

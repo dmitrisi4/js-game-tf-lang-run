@@ -14,6 +14,7 @@ import { useScene } from 'react-babylonjs';
 import {
 	isTenerifeFullIslandMode,
 	isTenerifeFullIslandTerrainMeshName,
+	TENERIFE_FULL_ISLAND_WATER_SURFACE_Y,
 } from '@/scenes/environment/tenerifeFullIslandConfig';
 import { getTenerifeFullIslandHeightAtPosition } from '@/scenes/environment/tenerifeFullIslandHeightfield';
 import { applyCollisionFilterToBody } from '@/scenes/physics/collisionLayers';
@@ -49,6 +50,12 @@ import {
 	type RoofLandingPointType,
 	shouldLoadPuertoRoofTraversal,
 } from './roofTraversal';
+import { createWaterEntrySplash } from './waterEntryEffects';
+import {
+	getPlayerWaterState,
+	getWaterAdjustedMoveSpeed,
+	isEnteringWater,
+} from './waterInteraction';
 
 type PropsType = {
 	commands: PlayerInputCommands;
@@ -65,7 +72,6 @@ const PLAYER_GROUND_RAY_LENGTH = 1.28;
 const PLAYER_GROUND_MAX_VERTICAL_SPEED = 0.45;
 const TENERIFE_FULL_ISLAND_SUPPORT_RAY_HEIGHT = 80;
 const TENERIFE_FULL_ISLAND_SUPPORT_RAY_LENGTH = 180;
-const TENERIFE_FULL_ISLAND_KINEMATIC_FALLBACK_STEP_DOWN = 1.2;
 const PLAYER_MAX_FALL_SPEED = -18;
 const PLAYER_SPAWN_POSITION = new Vector3(-7, 1.5, -6);
 const PLAYER_PHYSICS_OPTIONS = {
@@ -108,24 +114,16 @@ const setPlayerPhysicsPrestepDisabled = (playerMesh: Mesh): void => {
 };
 
 type TenerifeFullIslandSupportType = {
+	floorY: number;
 	normal: Vector3 | null;
 	supportedCenterY: number;
 };
 
 /** Resolves the full-island terrain height under the player capsule. */
-const getTenerifeFullIslandSupportAtPosition = (
+export const getTenerifeFullIslandSupportAtPosition = (
 	position: Vector3,
 	scene: BabylonScene,
 ): TenerifeFullIslandSupportType | null => {
-	const heightfieldY = getTenerifeFullIslandHeightAtPosition(position);
-
-	if (heightfieldY !== null) {
-		return {
-			normal: null,
-			supportedCenterY: getCapsuleCenterYForFloor(heightfieldY),
-		};
-	}
-
 	const supportHit = scene.pickWithRay(
 		new Ray(
 			position.add(new Vector3(0, TENERIFE_FULL_ISLAND_SUPPORT_RAY_HEIGHT, 0)),
@@ -135,39 +133,26 @@ const getTenerifeFullIslandSupportAtPosition = (
 		(mesh) => isTenerifeFullIslandTerrainMeshName(mesh.name) && mesh.isEnabled() && mesh.isPickable,
 	);
 
-	if (!supportHit?.hit || !supportHit.pickedPoint) {
-		return null;
+	if (supportHit?.hit && supportHit.pickedPoint) {
+		const supportedCenterY = getCapsuleCenterYForFloor(supportHit.pickedPoint.y);
+
+		return {
+			floorY: supportHit.pickedPoint.y,
+			normal: supportHit.getNormal(true, false),
+			supportedCenterY,
+		};
 	}
 
-	const supportedCenterY = getCapsuleCenterYForFloor(supportHit.pickedPoint.y);
-
-	return {
-		normal: supportHit.getNormal(true, false),
-		supportedCenterY,
-	};
-};
-
-/** Moves the player body vertically without resetting its horizontal movement state. */
-const movePlayerPhysicsBodyVertically = (playerMesh: Mesh, nextY: number): void => {
-	const physicsBody = playerMesh.physicsBody;
-	const nextPosition = new Vector3(
-		playerMesh.absolutePosition.x,
-		nextY,
-		playerMesh.absolutePosition.z,
-	);
-
-	playerMesh.position.copyFrom(nextPosition);
-	playerMesh.rotationQuaternion = Quaternion.Identity();
-	playerMesh.rotation.copyFromFloats(0, 0, 0);
-	playerMesh.computeWorldMatrix(true);
-
-	if (!physicsBody) {
-		return;
+	const heightfieldY = getTenerifeFullIslandHeightAtPosition(position);
+	if (heightfieldY !== null) {
+		return {
+			floorY: heightfieldY,
+			normal: null,
+			supportedCenterY: getCapsuleCenterYForFloor(heightfieldY),
+		};
 	}
 
-	physicsBody.setPrestepType(PhysicsPrestepType.TELEPORT);
-	physicsBody.setTargetTransform(nextPosition, Quaternion.Identity());
-	physicsBody.setAngularVelocity(ZERO_VELOCITY);
+	return null;
 };
 
 /** Moves the full-island player as a terrain-following kinematic body. */
@@ -176,30 +161,77 @@ const moveTenerifeFullIslandPlayer = (
 	scene: BabylonScene,
 	movementDirection: Vector3,
 	moveSpeed: number,
-): { isSupported: boolean; normal: Vector3 | null } => {
+	wasInWater: boolean,
+): {
+	isEnteringWater: boolean;
+	isInWater: boolean;
+	isSupported: boolean;
+	normal: Vector3 | null;
+} => {
 	const deltaSeconds = Math.min(scene.getEngine().getDeltaTime() / 1000, 0.05);
 	const currentPosition = playerMesh.absolutePosition;
-	const nextPlanarPosition = new Vector3(
+	const candidatePlanarPosition = new Vector3(
 		currentPosition.x + movementDirection.x * moveSpeed * deltaSeconds,
 		currentPosition.y,
 		currentPosition.z + movementDirection.z * moveSpeed * deltaSeconds,
 	);
 	const support =
-		getTenerifeFullIslandSupportAtPosition(nextPlanarPosition, scene) ??
+		getTenerifeFullIslandSupportAtPosition(candidatePlanarPosition, scene) ??
 		getTenerifeFullIslandSupportAtPosition(currentPosition, scene);
 
 	if (!support) {
-		movePlayerPhysicsBodyVertically(
-			playerMesh,
-			currentPosition.y - TENERIFE_FULL_ISLAND_KINEMATIC_FALLBACK_STEP_DOWN * deltaSeconds,
+		// Heightfield may not be built yet (first frames after spawn) or the player
+		// has walked off the island into open water. Treat that case as swimming so
+		// water drag and surface effects stay active even without a terrain hit.
+		const nextIsEnteringWater = !wasInWater;
+		const adjustedMoveSpeed = getWaterAdjustedMoveSpeed(moveSpeed, true, nextIsEnteringWater);
+		const waterState = getPlayerWaterState({
+			floorY: TENERIFE_FULL_ISLAND_WATER_SURFACE_Y - 2,
+			timeSeconds: performance.now() * 0.001,
+			waterSurfaceY: TENERIFE_FULL_ISLAND_WATER_SURFACE_Y,
+		});
+		const nextPosition = new Vector3(
+			currentPosition.x + movementDirection.x * adjustedMoveSpeed * deltaSeconds,
+			waterState.swimCenterY,
+			currentPosition.z + movementDirection.z * adjustedMoveSpeed * deltaSeconds,
 		);
+		playerMesh.position.copyFrom(nextPosition);
+		playerMesh.rotationQuaternion = Quaternion.Identity();
+		playerMesh.rotation.copyFromFloats(0, 0, 0);
+		playerMesh.computeWorldMatrix(true);
 
-		return { isSupported: false, normal: null };
+		if (playerMesh.physicsBody) {
+			playerMesh.physicsBody.setPrestepType(PhysicsPrestepType.TELEPORT);
+			playerMesh.physicsBody.setTargetTransform(nextPosition, Quaternion.Identity());
+			playerMesh.physicsBody.setLinearVelocity(ZERO_VELOCITY);
+			playerMesh.physicsBody.setAngularVelocity(ZERO_VELOCITY);
+			setPlayerPhysicsPrestepDisabled(playerMesh);
+		}
+
+		return { isEnteringWater: nextIsEnteringWater, isInWater: true, isSupported: true, normal: null };
 	}
 
+	const waterState = getPlayerWaterState({
+		floorY: support.floorY,
+		timeSeconds: performance.now() * 0.001,
+		waterSurfaceY: TENERIFE_FULL_ISLAND_WATER_SURFACE_Y,
+	});
+	const nextIsEnteringWater = isEnteringWater(wasInWater, waterState.isInWater);
+	const adjustedMoveSpeed = getWaterAdjustedMoveSpeed(
+		moveSpeed,
+		waterState.isInWater,
+		nextIsEnteringWater,
+	);
+	const nextPlanarPosition = new Vector3(
+		currentPosition.x + movementDirection.x * adjustedMoveSpeed * deltaSeconds,
+		currentPosition.y,
+		currentPosition.z + movementDirection.z * adjustedMoveSpeed * deltaSeconds,
+	);
 	const nextPosition = new Vector3(
 		nextPlanarPosition.x,
-		support.supportedCenterY,
+		waterState.isInWater
+			? Math.max(support.supportedCenterY, waterState.swimCenterY)
+			: support.supportedCenterY,
 		nextPlanarPosition.z,
 	);
 
@@ -216,7 +248,12 @@ const moveTenerifeFullIslandPlayer = (
 		setPlayerPhysicsPrestepDisabled(playerMesh);
 	}
 
-	return { isSupported: true, normal: support.normal };
+	return {
+		isEnteringWater: nextIsEnteringWater,
+		isInWater: waterState.isInWater,
+		isSupported: true,
+		normal: support.normal,
+	};
 };
 
 /**
@@ -240,6 +277,7 @@ const Player: React.FC<PropsType> = ({
 	const isMovingRef = useRef(false);
 	const isSprintingRef = useRef(false);
 	const isAirborneRef = useRef(false);
+	const isInWaterRef = useRef(false);
 	const facingYawRef = useRef(0);
 	const previousJumpCommandRef = useRef(false);
 	const pendingJumpPhysicsAtRef = useRef<number | null>(null);
@@ -251,6 +289,7 @@ const Player: React.FC<PropsType> = ({
 	const [isMoving, setIsMoving] = useState(false);
 	const [isSprinting, setIsSprinting] = useState(false);
 	const [isAirborne, setIsAirborne] = useState(false);
+	const [isInWater, setIsInWater] = useState(false);
 	const [jumpAnimationRequestId, setJumpAnimationRequestId] = useState(0);
 
 	commandsRef.current = commands;
@@ -355,14 +394,27 @@ const Player: React.FC<PropsType> = ({
 
 			if (isFullIslandTraversal) {
 				const nextIsSprinting = nextIsMoving && commandsRef.current.sprint;
-				const nextMoveSpeed = nextIsSprinting ? PLAYER_SPRINT_SPEED : PLAYER_MOVE_SPEED;
+				const dryMoveSpeed = nextIsSprinting ? PLAYER_SPRINT_SPEED : PLAYER_MOVE_SPEED;
 				const kinematicSupport = moveTenerifeFullIslandPlayer(
 					playerMeshRef.current,
 					scene,
 					movementDirection,
-					nextMoveSpeed,
+					dryMoveSpeed,
+					isInWaterRef.current,
 				);
 				const nextFullIslandIsAirborne = !kinematicSupport.isSupported;
+				const nextIsInWater = kinematicSupport.isInWater;
+
+				if (kinematicSupport.isEnteringWater) {
+					createWaterEntrySplash(
+						scene,
+						new Vector3(
+							playerMeshRef.current.absolutePosition.x,
+							TENERIFE_FULL_ISLAND_WATER_SURFACE_Y,
+							playerMeshRef.current.absolutePosition.z,
+						),
+					);
+				}
 
 				if (isMovingRef.current !== nextIsMoving) {
 					isMovingRef.current = nextIsMoving;
@@ -377,6 +429,11 @@ const Player: React.FC<PropsType> = ({
 				if (isAirborneRef.current !== nextFullIslandIsAirborne) {
 					isAirborneRef.current = nextFullIslandIsAirborne;
 					setIsAirborne(nextFullIslandIsAirborne);
+				}
+
+				if (isInWaterRef.current !== nextIsInWater) {
+					isInWaterRef.current = nextIsInWater;
+					setIsInWater(nextIsInWater);
 				}
 
 				if (nextIsMoving) {
@@ -567,6 +624,7 @@ const Player: React.FC<PropsType> = ({
 			<AssetPlayerVisual
 				facingYawRef={facingYawRef}
 				isAirborne={isAirborne}
+				isInWater={isInWater}
 				isMoving={isMoving}
 				isSprinting={isSprinting}
 				jumpAnimationRequestId={jumpAnimationRequestId}
