@@ -100,7 +100,9 @@ const InventoryOverlay: React.FC = () => {
 					<section className='inventory-bag-pane'>
 						<div className='inventory-pane-header'>
 							<p className='inventory-section-title'>Bag</p>
-							<span>{inventoryItems.length}/{inventorySlots.length}</span>
+							<span>
+								{inventoryItems.length}/{inventorySlots.length}
+							</span>
 						</div>
 						<div className='inventory-slot-grid'>
 							{inventorySlots.map(({ id, item }) => (

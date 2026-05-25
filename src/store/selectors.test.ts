@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+	selectDiscoveredLetters,
+	selectDiscoveredWords,
 	selectInventory,
 	selectInventoryLetters,
 	selectInventoryWords,
-	selectDiscoveredLetters,
-	selectDiscoveredWords,
 	selectIsInventoryOpen,
 	selectIsTalentTreeOpen,
 	selectPlayerHp,
