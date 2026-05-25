@@ -1,5 +1,5 @@
 import type React from 'react';
-import AssetLetterCollectible from './AssetLetterCollectible';
+import AssetLetterCollectiblesManager from './AssetLetterCollectiblesManager';
 import type { CollectibleSpawnPoint } from './collectibleTypes';
 
 type PropsType = {
@@ -13,13 +13,7 @@ type PropsType = {
  * @returns {JSX.Element} The collectibles subtree.
  */
 const LetterCollectibles: React.FC<PropsType> = ({ collectibles }) => {
-	return (
-		<>
-			{collectibles.map((collectible) => (
-				<AssetLetterCollectible key={collectible.id} collectible={collectible} />
-			))}
-		</>
-	);
+	return <AssetLetterCollectiblesManager collectibles={collectibles} />;
 };
 
 export default LetterCollectibles;
