@@ -29,18 +29,29 @@ const TERRAIN_COLORS: Record<TerrainMaterialKey, Color4> = {
 };
 
 const TERRAIN_TEXTURE_BASE_PATH = '/textures/Ground068_4K-JPG/Ground068_4K-JPG';
-const TERRAIN_TEXTURE_REPEAT = WORLD_SIZE / 8;
 
-const createTerrainTexture = (name: string, url: string, scene: Scene, gammaSpace = false) => {
+/** Macro tiling — large-scale pattern visible from distance. */
+const TERRAIN_TEXTURE_REPEAT_MACRO = 6;
+
+/** Micro tiling — fine surface grain visible up close. */
+const TERRAIN_TEXTURE_REPEAT_MICRO = 22;
+
+const createTerrainTexture = (
+	name: string,
+	url: string,
+	scene: Scene,
+	gammaSpace = false,
+	repeat = TERRAIN_TEXTURE_REPEAT_MACRO,
+) => {
 	const texture = new Texture(url, scene);
 
 	texture.name = name;
 	texture.gammaSpace = gammaSpace;
-	texture.uScale = TERRAIN_TEXTURE_REPEAT;
-	texture.vScale = TERRAIN_TEXTURE_REPEAT;
+	texture.uScale = repeat;
+	texture.vScale = repeat;
 	texture.wrapU = Texture.WRAP_ADDRESSMODE;
 	texture.wrapV = Texture.WRAP_ADDRESSMODE;
-	texture.anisotropicFilteringLevel = 8;
+	texture.anisotropicFilteringLevel = 16;
 
 	return texture;
 };
@@ -101,35 +112,56 @@ const TerrainGround: React.FC<PropsType> = ({ havokPlugin }) => {
 
 		const material = new PBRMaterial('terrain-ground-material', scene);
 		material.albedoColor = Color3.White();
+
+		// Macro albedo — large-scale colour pattern
 		material.albedoTexture = createTerrainTexture(
 			'terrain-ground-color-texture',
 			`${TERRAIN_TEXTURE_BASE_PATH}_Color.jpg`,
 			scene,
 			true,
+			TERRAIN_TEXTURE_REPEAT_MACRO,
 		);
+
+		// Micro normal — fine surface detail visible up close
 		material.bumpTexture = createTerrainTexture(
 			'terrain-ground-normal-texture',
 			`${TERRAIN_TEXTURE_BASE_PATH}_NormalGL.jpg`,
 			scene,
+			false,
+			TERRAIN_TEXTURE_REPEAT_MICRO,
 		);
-		material.bumpTexture.level = 0.55;
+		// Stronger normal for visible micro-relief
+		material.bumpTexture.level = 1.6;
+
 		material.ambientTexture = createTerrainTexture(
 			'terrain-ground-ambient-occlusion-texture',
 			`${TERRAIN_TEXTURE_BASE_PATH}_AmbientOcclusion.jpg`,
 			scene,
+			false,
+			TERRAIN_TEXTURE_REPEAT_MACRO,
 		);
-		material.ambientTextureStrength = 0.45;
+		// Stronger AO gives more surface depth and contrast
+		material.ambientTextureStrength = 0.72;
 		material.useAmbientInGrayScale = true;
+
 		material.metallicTexture = createTerrainTexture(
 			'terrain-ground-roughness-texture',
 			`${TERRAIN_TEXTURE_BASE_PATH}_Roughness.jpg`,
 			scene,
+			false,
+			TERRAIN_TEXTURE_REPEAT_MICRO,
 		);
 		material.metallic = 0;
-		material.roughness = 0.92;
+		material.roughness = 0.88;
 		material.useRoughnessFromMetallicTextureGreen = true;
 		material.useMetallnessFromMetallicTextureBlue = false;
-		material.specularIntensity = 0.18;
+		material.specularIntensity = 0.12;
+
+		// Parallax occlusion mapping — gives depth illusion using Displacement map
+		material.useParallax = true;
+		material.useParallaxOcclusion = true;
+		material.parallaxScaleBias = 0.035;
+
 		terrain.material = material;
 
 		const physicsAggregate = havokPlugin

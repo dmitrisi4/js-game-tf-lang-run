@@ -17,13 +17,13 @@ const Lighting: React.FC<PropsType> = () => {
 		<>
 			<hemisphericLight
 				name='hemispheric-light'
-				intensity={0.65}
+				intensity={0.3}
 				direction={new Vector3(0, 1, 0)}
-				groundColor={Color3.FromHexString('#5d5a52')}
+				groundColor={Color3.FromHexString('#4a4840')}
 			/>
 			<directionalLight
 				name='sun-light'
-				intensity={0.75}
+				intensity={1.1}
 				direction={new Vector3(-0.4, -1, 0.2)}
 				position={new Vector3(10, 18, -8)}
 			/>

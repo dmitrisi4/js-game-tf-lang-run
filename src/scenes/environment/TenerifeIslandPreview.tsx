@@ -24,63 +24,165 @@ const TENERIFE_PREVIEW_SCALE = 48;
 const TENERIFE_TERRAIN_MESH_NAME = 'env_tenerife_full_island_terrain_1unit_1km';
 const PUERTO_DE_LA_CRUZ_LOCAL_POSITION = new Vector3(6.25, 0.347, 15.58);
 const TENERIFE_TEXTURE_BASE_PATH = '/textures/Ground068_4K-JPG/Ground068_4K-JPG';
-const TENERIFE_TEXTURE_REPEAT = 72;
+/**
+ * UV projection extent in local mesh space. Covers the full island width
+ * so UV goes 0→1 across 108 local units (= 5184 world units at scale×48).
+ */
 const TENERIFE_LOCAL_TEXTURE_EXTENT = 108;
+
+/**
+ * Normal and roughness micro-tiling — 1 tile ≈ 72 world-unit squares.
+ * Keeps fine surface detail visible at player scale without blurring.
+ */
+const TENERIFE_NORMAL_REPEAT = 72;
+
+/**
+ * Volcanic height zones in world-Y space (after baking scale×48 transform).
+ * Puerto de la Cruz city level ≈ Y 17. Teide peak ≈ Y 178.
+ * Colors reference Canary Islands volcanic terrain palette.
+ */
+type VolcanicZoneType = {
+	maxY: number;
+	r: number;
+	g: number;
+	b: number;
+};
+
+const VOLCANIC_HEIGHT_ZONES: VolcanicZoneType[] = [
+	// Coastal / beach — warm volcanic sand
+	{ maxY: 4, r: 0.58, g: 0.52, b: 0.38 },
+	// Dark basalt — low coastal cliffs and lava fields
+	{ maxY: 18, r: 0.2, g: 0.16, b: 0.13 },
+	// Reddish-brown volcanic rock — mid slopes
+	{ maxY: 45, r: 0.42, g: 0.26, b: 0.17 },
+	// Warm volcanic soil — dry sparse vegetation zone
+	{ maxY: 90, r: 0.5, g: 0.38, b: 0.25 },
+	// Pale grey-tan — upper pine forest / eroded rock
+	{ maxY: 140, r: 0.58, g: 0.52, b: 0.4 },
+	// Volcanic ash / pumice — Teide caldera zone
+	{ maxY: Number.POSITIVE_INFINITY, r: 0.65, g: 0.61, b: 0.55 },
+];
 
 type PropsType = {
 	havokPlugin: HavokPlugin | null;
 	onReadyChange?: (isReady: boolean) => void;
 };
 
-const createTenerifeTexture = (name: string, url: string, scene: Scene, gammaSpace = false) => {
+const createTenerifeTexture = (
+	name: string,
+	url: string,
+	scene: Scene,
+	gammaSpace = false,
+	repeat = TENERIFE_NORMAL_REPEAT,
+) => {
 	const texture = new Texture(url, scene);
 
 	texture.name = name;
 	texture.gammaSpace = gammaSpace;
-	texture.uScale = TENERIFE_TEXTURE_REPEAT;
-	texture.vScale = TENERIFE_TEXTURE_REPEAT;
+	texture.uScale = repeat;
+	texture.vScale = repeat;
 	texture.wrapU = Texture.WRAP_ADDRESSMODE;
 	texture.wrapV = Texture.WRAP_ADDRESSMODE;
-	texture.anisotropicFilteringLevel = 8;
+	// 16x anisotropic — critical for glancing-angle terrain readability
+	texture.anisotropicFilteringLevel = 16;
 
 	return texture;
 };
 
+/**
+ * Builds a volcanic-island PBR material driven by vertex colors for zone colour,
+ * with a high-frequency normal map overlay for surface micro-detail.
+ *
+ * Ground068 albedo is intentionally omitted — it is a temperate forest texture
+ * that does not match Tenerife volcanic terrain. Zone colours come from
+ * `applyVolcanicVertexColors` which maps world-Y height to a Canary Islands palette.
+ */
 const createTenerifeGroundMaterial = (scene: Scene): PBRMaterial => {
 	const material = new PBRMaterial('tenerife-ground-textured-material', scene);
 
+	// Zone colour is supplied via vertex colors; albedoColor acts as tint multiplier.
 	material.albedoColor = Color3.White();
-	material.albedoTexture = createTenerifeTexture(
-		'tenerife-ground-color-texture',
-		`${TENERIFE_TEXTURE_BASE_PATH}_Color.jpg`,
-		scene,
-		true,
-	);
+
+	// Normal map — micro surface detail at player scale
 	material.bumpTexture = createTenerifeTexture(
 		'tenerife-ground-normal-texture',
 		`${TENERIFE_TEXTURE_BASE_PATH}_NormalGL.jpg`,
 		scene,
+		false,
+		TENERIFE_NORMAL_REPEAT,
 	);
-	material.bumpTexture.level = 0.5;
+	// Stronger level — visible micro-relief on steep volcanic slopes
+	material.bumpTexture.level = 1.5;
+
+	// AO — baked ambient occlusion for crevice depth
 	material.ambientTexture = createTenerifeTexture(
-		'tenerife-ground-ambient-occlusion-texture',
+		'tenerife-ground-ao-texture',
 		`${TENERIFE_TEXTURE_BASE_PATH}_AmbientOcclusion.jpg`,
 		scene,
+		false,
+		TENERIFE_NORMAL_REPEAT,
 	);
-	material.ambientTextureStrength = 0.45;
+	material.ambientTextureStrength = 0.72;
 	material.useAmbientInGrayScale = true;
+
+	// Roughness — volcanic rock varies from glassy to matte
 	material.metallicTexture = createTenerifeTexture(
 		'tenerife-ground-roughness-texture',
 		`${TENERIFE_TEXTURE_BASE_PATH}_Roughness.jpg`,
 		scene,
+		false,
+		TENERIFE_NORMAL_REPEAT,
 	);
 	material.metallic = 0;
-	material.roughness = 0.92;
+	material.roughness = 0.88;
 	material.useRoughnessFromMetallicTextureGreen = true;
 	material.useMetallnessFromMetallicTextureBlue = false;
-	material.specularIntensity = 0.18;
+	// Volcanic rock has very low specular — avoid wet-look artefacts
+	material.specularIntensity = 0.08;
+
+	// Parallax occlusion — enhances depth on rough lava texture
+	material.useParallax = true;
+	material.useParallaxOcclusion = true;
+	material.parallaxScaleBias = 0.03;
 
 	return material;
+};
+
+/** Resolves the volcanic zone colour for a given world-Y height value. */
+const getVolcanicColor = (worldY: number): VolcanicZoneType => {
+	const zone = VOLCANIC_HEIGHT_ZONES.find((z) => worldY <= z.maxY);
+
+	return zone ?? VOLCANIC_HEIGHT_ZONES[VOLCANIC_HEIGHT_ZONES.length - 1];
+};
+
+/**
+ * Paints each vertex with a height-derived volcanic colour.
+ *
+ * Must be called AFTER `bakeRootTransformIntoMesh` so that vertex Y values
+ * are in world space. A small sine-based variation breaks up uniform banding.
+ * PBRMaterial automatically multiplies vertex colours with albedoColor.
+ */
+const applyVolcanicVertexColors = (mesh: Mesh): void => {
+	const positions = mesh.getVerticesData(VertexBuffer.PositionKind);
+
+	if (!positions) {
+		return;
+	}
+
+	const colors: number[] = [];
+
+	for (let index = 0; index < positions.length; index += 3) {
+		const x = positions[index];
+		const y = positions[index + 1];
+		const z = positions[index + 2];
+		const zone = getVolcanicColor(y);
+		// Subtle variation to break uniform colour banding between zones
+		const variation = 0.91 + (Math.sin(x * 0.031 + z * 0.019) + 1) * 0.045;
+
+		colors.push(zone.r * variation, zone.g * variation, zone.b * variation, 1.0);
+	}
+
+	mesh.setVerticesData(VertexBuffer.ColorKind, colors, false);
 };
 
 const isTerrainMesh = (mesh: AbstractMesh): mesh is Mesh =>
@@ -187,6 +289,8 @@ const TenerifeIslandPreview: React.FC<PropsType> = ({ havokPlugin, onReadyChange
 					if (isTerrainMesh(mesh)) {
 						mesh.name = 'ground1';
 						applyTerrainUv(mesh);
+						// Height-based volcanic colours — must run after transform bake
+						applyVolcanicVertexColors(mesh);
 						mesh.material = groundMaterial;
 						mesh.isPickable = true;
 						mesh.checkCollisions = true;

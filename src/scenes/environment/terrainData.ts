@@ -6,7 +6,8 @@ export type TerrainSample = {
 	material: TerrainMaterialKey;
 };
 
-export const TERRAIN_SUBDIVISIONS = 48;
+/** Higher subdivision count produces smoother height interpolation between vertices. */
+export const TERRAIN_SUBDIVISIONS = 128;
 export const TERRAIN_MIN_HEIGHT = -0.45;
 export const TERRAIN_MAX_HEIGHT = 1.55;
 
