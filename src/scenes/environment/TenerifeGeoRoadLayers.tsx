@@ -12,6 +12,15 @@ import { isInsideTenerifeCityFootprint, type TenerifeRoadLayerData } from './ten
 
 type PropsType = {
 	roadLayers: TenerifeRoadLayerData[];
+	roadTransform?: TenerifeRoadTransformType;
+};
+
+export type TenerifeRoadTransformType = {
+	offset: {
+		x: number;
+		z: number;
+	};
+	scale: number;
 };
 
 const ROAD_SURFACE_BIAS = 0.012;
@@ -38,23 +47,41 @@ const getRoadSurfaceHeight = (
 	return null;
 };
 
+/** Applies an optional full-island transform to Puerto-local road coordinates. */
+export const transformTenerifeRoadPoint = (
+	point: Vector3,
+	roadTransform?: TenerifeRoadTransformType,
+): Vector3 => {
+	if (!roadTransform) {
+		return point;
+	}
+
+	return new Vector3(
+		roadTransform.offset.x + point.x * roadTransform.scale,
+		point.y * roadTransform.scale,
+		roadTransform.offset.z + point.z * roadTransform.scale,
+	);
+};
+
 const createRoadRibbonMesh = (
 	name: string,
 	lines: Vector3[][],
 	width: number,
 	color: Color3,
 	scene: NonNullable<ReturnType<typeof useScene>>,
+	roadTransform?: TenerifeRoadTransformType,
 ): Mesh => {
 	return measureTenerifeSyncStep(`Road mesh creation: ${name}`, () => {
-		const halfWidth = width / 2;
+		const renderWidth = width * (roadTransform?.scale ?? 1);
+		const halfWidth = renderWidth / 2;
 		const positions: number[] = [];
 		const indices: number[] = [];
 		let vertexIndex = 0;
 
 		for (const line of lines) {
 			for (let pointIndex = 0; pointIndex < line.length - 1; pointIndex += 1) {
-				const from = line[pointIndex];
-				const to = line[pointIndex + 1];
+				const from = transformTenerifeRoadPoint(line[pointIndex], roadTransform);
+				const to = transformTenerifeRoadPoint(line[pointIndex + 1], roadTransform);
 				const dx = to.x - from.x;
 				const dz = to.z - from.z;
 				const length = Math.hypot(dx, dz);
@@ -63,7 +90,7 @@ const createRoadRibbonMesh = (
 					z: (from.z + to.z) / 2,
 				};
 
-				if (length <= 0.01 || !isInsideTenerifeCityFootprint(segmentMidpoint)) {
+				if (length <= 0.01 || (!roadTransform && !isInsideTenerifeCityFootprint(segmentMidpoint))) {
 					continue;
 				}
 
@@ -141,7 +168,7 @@ const createRoadRibbonMesh = (
  * The source is split into three visual layers so gameplay can tune road,
  * walking, and service readability independently.
  */
-const TenerifeGeoRoadLayers: React.FC<PropsType> = ({ roadLayers }) => {
+const TenerifeGeoRoadLayers: React.FC<PropsType> = ({ roadLayers, roadTransform }) => {
 	const scene = useScene();
 	const [isGroundMeshReady, setIsGroundMeshReady] = useState(false);
 	const stableRoadLayers = useMemo(() => roadLayers, [roadLayers]);
@@ -172,6 +199,7 @@ const TenerifeGeoRoadLayers: React.FC<PropsType> = ({ roadLayers }) => {
 					layer.width,
 					layer.color,
 					scene,
+					roadTransform,
 				),
 			);
 
@@ -180,7 +208,7 @@ const TenerifeGeoRoadLayers: React.FC<PropsType> = ({ roadLayers }) => {
 				mesh.dispose();
 			}
 		};
-	}, [isGroundMeshReady, stableRoadLayers, scene]);
+	}, [isGroundMeshReady, roadTransform, stableRoadLayers, scene]);
 
 	return null;
 };

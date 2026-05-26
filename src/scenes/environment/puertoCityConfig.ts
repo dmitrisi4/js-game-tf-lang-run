@@ -55,7 +55,7 @@ export const getPuertoRoadRenderMode = (
 	}
 
 	if (terrainMode === 'island-full') {
-		return 'none';
+		return 'baked';
 	}
 
 	return 'mesh';

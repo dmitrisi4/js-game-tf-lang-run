@@ -24,8 +24,8 @@ describe('puertoCityConfig', () => {
 		expect(shouldRenderRoadMeshes(getPuertoRoadRenderMode('island', '?tenerife=1'))).toBe(true);
 	});
 
-	it('defaults road meshes off for full island terrain until Puerto alignment is implemented', () => {
-		expect(getPuertoRoadRenderMode('island-full', '?tenerife=1&terrain=island-full')).toBe('none');
+	it('defaults full island Puerto overlay to baked roads to avoid synchronous road ribbon cost', () => {
+		expect(getPuertoRoadRenderMode('island-full', '?tenerife=1&terrain=island-full')).toBe('baked');
 		expect(shouldRenderRoadMeshes(getPuertoRoadRenderMode('island-full'))).toBe(false);
 	});
 

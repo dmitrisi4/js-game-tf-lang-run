@@ -1,7 +1,4 @@
 import { SceneLoader } from '@babylonjs/core/Loading/sceneLoader';
-import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
-import { Texture } from '@babylonjs/core/Materials/Textures/texture';
-import { Color3 } from '@babylonjs/core/Maths/math.color';
 import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
 import { VertexBuffer } from '@babylonjs/core/Meshes/buffer';
 import { Mesh } from '@babylonjs/core/Meshes/mesh';
@@ -31,9 +28,6 @@ type PropsType = {
 	havokPlugin: HavokPlugin | null;
 	onReadyChange?: (isReady: boolean) => void;
 };
-
-/** Texture source — micro-detail normal and AO overlay on the island terrain tiles. */
-const ISLAND_TEXTURE_BASE = '/textures/Ground068_4K-JPG/Ground068_4K-JPG';
 
 /**
  * One world-unit tile size for the projected UV.

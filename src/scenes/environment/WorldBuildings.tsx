@@ -10,20 +10,24 @@ import type { HavokPlugin } from '@babylonjs/core/Physics/v2/Plugins/havokPlugin
 import type { Scene as BabylonScene } from '@babylonjs/core/scene';
 import '@babylonjs/loaders/OBJ';
 import type React from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useScene } from 'react-babylonjs';
 import { finishTenerifePerfTimer, startTenerifePerfTimer } from './tenerifePerformance';
 import { getTerrainHeightAt } from './terrainData';
-import type { WorldBuilding, WorldBuildingModelId } from './worldData';
+import type { WorldBuilding, WorldBuildingModelId, WorldPosition } from './worldData';
 
 type PropsType = {
 	buildings: WorldBuilding[];
 	debugLabel?: string;
+	groundHeightProvider?: GroundHeightProviderType;
 	groundMeshName?: string;
 	havokPlugin: HavokPlugin | null;
 	onReadyChange?: (isReady: boolean) => void;
 	positionOffset?: { x: number; z: number };
+	visualMode?: 'boxes' | 'models';
 };
+
+type GroundHeightProviderType = (position: WorldPosition) => number | null;
 
 const BUILDING_MODEL_ROOT_URL = '/models/build/buildings-pack-jan2019/OBJ/';
 const BUILDING_MODEL_FILENAMES: Record<WorldBuildingModelId, string> = {
@@ -64,15 +68,14 @@ const getBuildingAssetContainer = (
 const getBuildingBasePosition = (
 	building: WorldBuilding,
 	positionOffset = { x: 0, z: 0 },
-): Vector3 =>
-	new Vector3(
-		building.position.x + positionOffset.x,
-		getTerrainHeightAt({
-			x: building.position.x + positionOffset.x,
-			z: building.position.z + positionOffset.z,
-		}) + (building.heightOffset ?? 0),
-		building.position.z + positionOffset.z,
-	);
+	groundHeightProvider?: GroundHeightProviderType,
+): Vector3 => {
+	const x = building.position.x + positionOffset.x;
+	const z = building.position.z + positionOffset.z;
+	const groundY = groundHeightProvider?.({ x, z }) ?? getTerrainHeightAt({ x, z });
+
+	return new Vector3(x, groundY + (building.heightOffset ?? 0), z);
+};
 
 const disablePickingForImportedRoot = (rootNode: TransformNode): void => {
 	if (rootNode instanceof Mesh) {
@@ -118,9 +121,10 @@ const normalizeImportedRootsToZeroY = (rootNodes: TransformNode[]): void => {
 
 const BuildingFallback: React.FC<{
 	building: WorldBuilding;
+	groundHeightProvider?: GroundHeightProviderType;
 	positionOffset?: { x: number; z: number };
-}> = ({ building, positionOffset }) => {
-	const basePosition = getBuildingBasePosition(building, positionOffset);
+}> = ({ building, groundHeightProvider, positionOffset }) => {
+	const basePosition = getBuildingBasePosition(building, positionOffset, groundHeightProvider);
 
 	return (
 		<box
@@ -149,17 +153,15 @@ const BuildingFallback: React.FC<{
 
 const BuildingCollider: React.FC<{
 	building: WorldBuilding;
+	groundHeightProvider?: GroundHeightProviderType;
 	havokPlugin: HavokPlugin | null;
 	positionOffset?: { x: number; z: number };
-}> = ({ building, havokPlugin, positionOffset = { x: 0, z: 0 } }) => {
+}> = ({ building, groundHeightProvider, havokPlugin, positionOffset = { x: 0, z: 0 } }) => {
 	const { collider, heightOffset = 0, id, position, yaw } = building;
 	const x = position.x + positionOffset.x;
 	const z = position.z + positionOffset.z;
-	const colliderPosition = new Vector3(
-		x,
-		getTerrainHeightAt({ x, z }) + heightOffset + collider.height / 2,
-		z,
-	);
+	const groundY = groundHeightProvider?.({ x, z }) ?? getTerrainHeightAt({ x, z });
+	const colliderPosition = new Vector3(x, groundY + heightOffset + collider.height / 2, z);
 
 	return (
 		<box
@@ -186,10 +188,18 @@ const BuildingCollider: React.FC<{
 const WorldBuildingModelManager: React.FC<{
 	modelId: WorldBuildingModelId;
 	buildings: WorldBuilding[];
+	groundHeightProvider?: GroundHeightProviderType;
 	groundMeshName?: string;
 	positionOffset?: { x: number; z: number };
 	onSettledChange: (modelId: string, isSettled: boolean) => void;
-}> = ({ modelId, buildings, groundMeshName, positionOffset = { x: 0, z: 0 }, onSettledChange }) => {
+}> = ({
+	modelId,
+	buildings,
+	groundHeightProvider,
+	groundMeshName,
+	positionOffset = { x: 0, z: 0 },
+	onSettledChange,
+}) => {
 	const scene = useScene();
 	const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
 	const anchorRef = useRef<TransformNode | null>(null);
@@ -302,7 +312,8 @@ const WorldBuildingModelManager: React.FC<{
 				const b = buildings[i];
 				const x = b.position.x + positionOffset.x;
 				const z = b.position.z + positionOffset.z;
-				let y = getTerrainHeightAt({ x, z }) + (b.heightOffset ?? 0);
+				let y =
+					(groundHeightProvider?.({ x, z }) ?? getTerrainHeightAt({ x, z })) + (b.heightOffset ?? 0);
 
 				if (groundMeshName) {
 					const ground = scene.getMeshByName(groundMeshName);
@@ -348,6 +359,7 @@ const WorldBuildingModelManager: React.FC<{
 		status,
 		buildings,
 		groundMeshName,
+		groundHeightProvider,
 		modelId,
 		onSettledChange,
 		positionOffset.x,
@@ -362,7 +374,12 @@ const WorldBuildingModelManager: React.FC<{
 	return (
 		<>
 			{buildings.map((building) => (
-				<BuildingFallback key={building.id} building={building} positionOffset={positionOffset} />
+				<BuildingFallback
+					key={building.id}
+					building={building}
+					groundHeightProvider={groundHeightProvider}
+					positionOffset={positionOffset}
+				/>
 			))}
 		</>
 	);
@@ -377,10 +394,12 @@ const WorldBuildingModelManager: React.FC<{
 const WorldBuildings: React.FC<PropsType> = ({
 	buildings,
 	debugLabel,
+	groundHeightProvider,
 	groundMeshName,
 	havokPlugin,
 	onReadyChange,
 	positionOffset,
+	visualMode = 'models',
 }) => {
 	const [settledModelIds, setSettledModelIds] = useState<Set<string>>(() => new Set());
 	const settlementStartedAtRef = useRef<number | null>(null);
@@ -404,6 +423,12 @@ const WorldBuildings: React.FC<PropsType> = ({
 	}, [buildings, onReadyChange]);
 
 	useEffect(() => {
+		if (visualMode === 'boxes') {
+			onReadyChange?.(true);
+		}
+	}, [onReadyChange, visualMode]);
+
+	useEffect(() => {
 		const isReady = buildings.length === 0 || settledModelIds.size >= groupedBuildings.size;
 
 		if (isReady && debugLabel && !hasReportedSettlementRef.current) {
@@ -417,29 +442,42 @@ const WorldBuildings: React.FC<PropsType> = ({
 		onReadyChange?.(isReady);
 	}, [buildings.length, debugLabel, groupedBuildings.size, onReadyChange, settledModelIds]);
 
+	const handleSettledChange = useCallback((id: string, isSettled: boolean) => {
+		setSettledModelIds((current) => {
+			const next = new Set(current);
+			if (isSettled) next.add(id);
+			else next.delete(id);
+			return next;
+		});
+	}, []);
+
 	return (
 		<>
-			{Array.from(groupedBuildings.entries()).map(([modelId, groupBuildings]) => (
-				<WorldBuildingModelManager
-					key={modelId}
-					modelId={modelId}
-					buildings={groupBuildings}
-					groundMeshName={groundMeshName}
-					positionOffset={positionOffset}
-					onSettledChange={(id, isSettled) => {
-						setSettledModelIds((current) => {
-							const next = new Set(current);
-							if (isSettled) next.add(id);
-							else next.delete(id);
-							return next;
-						});
-					}}
-				/>
-			))}
+			{visualMode === 'models'
+				? Array.from(groupedBuildings.entries()).map(([modelId, groupBuildings]) => (
+						<WorldBuildingModelManager
+							key={modelId}
+							modelId={modelId}
+							buildings={groupBuildings}
+							groundHeightProvider={groundHeightProvider}
+							groundMeshName={groundMeshName}
+							positionOffset={positionOffset}
+							onSettledChange={handleSettledChange}
+						/>
+					))
+				: buildings.map((building) => (
+						<BuildingFallback
+							key={building.id}
+							building={building}
+							groundHeightProvider={groundHeightProvider}
+							positionOffset={positionOffset}
+						/>
+					))}
 			{buildings.map((building) => (
 				<BuildingCollider
 					key={`${building.id}-collider`}
 					building={building}
+					groundHeightProvider={groundHeightProvider}
 					havokPlugin={havokPlugin}
 					positionOffset={positionOffset}
 				/>

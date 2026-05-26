@@ -70,6 +70,14 @@ type ProjectionConfig = {
 	offset: WorldPosition;
 };
 
+export type TenerifeWorldTransformType = {
+	offset: {
+		x: number;
+		z: number;
+	};
+	scale: number;
+};
+
 const METERS_PER_LATITUDE_DEGREE = 111_320;
 const TENERIFE_CITY_CENTER_LAT = 28.40330075;
 const TENERIFE_CITY_CENTER_LON = -16.5453185;
@@ -353,3 +361,33 @@ export const buildTenerifeRoadsideBuildings = (
 
 	return buildings;
 };
+
+/** Maps generated Puerto-local roadside buildings onto a larger Tenerife world. */
+export const transformTenerifeRoadsideBuildings = (
+	buildings: WorldBuilding[],
+	transform: TenerifeWorldTransformType,
+	options: {
+		groundSink?: number;
+		positionScaleMultiplier?: number;
+		visualScaleMultiplier?: number;
+	} = {},
+): WorldBuilding[] =>
+	buildings.map((building) => {
+		const positionScale = transform.scale * (options.positionScaleMultiplier ?? 1);
+		const visualScale = transform.scale * (options.visualScaleMultiplier ?? 1);
+
+		return {
+			...building,
+			collider: {
+				depth: building.collider.depth * visualScale,
+				height: building.collider.height * visualScale,
+				width: building.collider.width * visualScale,
+			},
+			heightOffset: (building.heightOffset ?? 0) * visualScale - (options.groundSink ?? 0),
+			position: {
+				x: transform.offset.x + building.position.x * positionScale,
+				z: transform.offset.z + building.position.z * positionScale,
+			},
+			scale: building.scale * visualScale,
+		};
+	});

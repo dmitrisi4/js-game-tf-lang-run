@@ -2,8 +2,10 @@ import { SceneLoader } from '@babylonjs/core/Loading/sceneLoader';
 import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial';
 import { Texture } from '@babylonjs/core/Materials/Textures/texture';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
+import type { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
 import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { PhysicsShapeType } from '@babylonjs/core/Physics/v2/IPhysicsEnginePlugin';
 import type { HavokPlugin } from '@babylonjs/core/Physics/v2/Plugins/havokPlugin';
 import { PhysicsAggregate } from '@babylonjs/core/Physics/v2/physicsAggregate';
@@ -17,7 +19,13 @@ import { PUERTO_CITY_ALBEDO_TEXTURE_URL, PUERTO_CITY_TERRAIN_MODEL_URL } from '.
 
 type PropsType = {
 	havokPlugin: HavokPlugin | null;
+	hideDistantContext?: boolean;
 	onReadyChange?: (isReady: boolean) => void;
+	transform?: {
+		alignBottomToY?: number;
+		position: Vector3;
+		scale: number;
+	};
 };
 
 const createPuertoCityTerrainMaterial = (scene: Scene): PBRMaterial => {
@@ -63,12 +71,40 @@ const findPuertoBuildingMeshes = (meshes: AbstractMesh[]): Mesh[] =>
 		(mesh): mesh is Mesh => mesh instanceof Mesh && isPuertoCityBuildingMeshName(mesh.name),
 	);
 
+const isPuertoDistantContextMeshName = (name: string): boolean =>
+	name.startsWith('puerto-atlantic-ocean') ||
+	name.startsWith('puerto-orotava-valley-ridge') ||
+	name.startsWith('puerto-teide-');
+
+const getMinimumWorldY = (meshes: Mesh[]): number | null => {
+	const minimumYValues = meshes
+		.filter((mesh) => mesh.isEnabled() && mesh.getTotalVertices() > 0)
+		.map((mesh) => {
+			mesh.computeWorldMatrix(true);
+			mesh.refreshBoundingInfo();
+
+			return mesh.getBoundingInfo().boundingBox.minimumWorld.y;
+		});
+
+	if (minimumYValues.length === 0) {
+		return null;
+	}
+
+	return Math.min(...minimumYValues);
+};
+
 /**
  * Loads the generated Puerto de la Cruz terrain patch as the active `ground1` mesh.
  */
-const PuertoCityTerrain: React.FC<PropsType> = ({ havokPlugin, onReadyChange }) => {
+const PuertoCityTerrain: React.FC<PropsType> = ({
+	havokPlugin,
+	hideDistantContext = false,
+	onReadyChange,
+	transform,
+}) => {
 	const scene = useScene();
 	const importedMeshesRef = useRef<AbstractMesh[]>([]);
+	const rootRef = useRef<TransformNode | null>(null);
 	const physicsAggregateRef = useRef<PhysicsAggregate | null>(null);
 	const buildingPhysicsAggregatesRef = useRef<PhysicsAggregate[]>([]);
 	const materialRef = useRef<PBRMaterial | null>(null);
@@ -83,6 +119,10 @@ const PuertoCityTerrain: React.FC<PropsType> = ({ havokPlugin, onReadyChange }) 
 		onReadyChange?.(false);
 		const material = createPuertoCityTerrainMaterial(scene);
 		materialRef.current = material;
+		const root = new TransformNode('puerto-city-terrain-root', scene);
+		root.position = transform?.position.clone() ?? root.position;
+		root.scaling.setAll(transform?.scale ?? 1);
+		rootRef.current = root;
 
 		SceneLoader.ImportMeshAsync(undefined, '', PUERTO_CITY_TERRAIN_MODEL_URL, scene)
 			.then((result) => {
@@ -98,8 +138,14 @@ const PuertoCityTerrain: React.FC<PropsType> = ({ havokPlugin, onReadyChange }) 
 				const buildingMeshes = findPuertoBuildingMeshes(result.meshes);
 
 				for (const mesh of result.meshes) {
+					mesh.parent = root;
 					mesh.isPickable = false;
 					mesh.checkCollisions = false;
+
+					if (hideDistantContext && isPuertoDistantContextMeshName(mesh.name)) {
+						mesh.setEnabled(false);
+						mesh.isVisible = false;
+					}
 				}
 
 				if (!terrainMesh) {
@@ -112,6 +158,17 @@ const PuertoCityTerrain: React.FC<PropsType> = ({ havokPlugin, onReadyChange }) 
 				terrainMesh.isPickable = true;
 				terrainMesh.checkCollisions = true;
 				terrainMesh.computeWorldMatrix(true);
+
+				if (typeof transform?.alignBottomToY === 'number') {
+					const overlayMinimumY = getMinimumWorldY(
+						buildingMeshes.length > 0 ? buildingMeshes : [terrainMesh],
+					);
+
+					if (overlayMinimumY !== null) {
+						root.position.y += transform.alignBottomToY - overlayMinimumY;
+						root.computeWorldMatrix(true);
+					}
+				}
 
 				if (havokPlugin) {
 					physicsAggregateRef.current = new PhysicsAggregate(
@@ -164,10 +221,14 @@ const PuertoCityTerrain: React.FC<PropsType> = ({ havokPlugin, onReadyChange }) 
 			}
 
 			importedMeshesRef.current = [];
+			if (rootRef.current && !rootRef.current.isDisposed()) {
+				rootRef.current.dispose(false, true);
+			}
+			rootRef.current = null;
 			materialRef.current?.dispose(true, true);
 			materialRef.current = null;
 		};
-	}, [havokPlugin, onReadyChange, scene]);
+	}, [havokPlugin, hideDistantContext, onReadyChange, scene, transform]);
 
 	return null;
 };
