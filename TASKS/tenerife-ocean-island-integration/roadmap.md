@@ -46,6 +46,7 @@ Gate: base ocean and shoreline foam render together without submerging dry terra
 Deliverables:
 - Full-island ocean component.
 - Base water material.
+- Terrain-derived sandy shoreline slope mesh.
 - Foam/shallow/deep layers.
 - Optional `WaterMaterial` experiment flag.
 
@@ -58,4 +59,3 @@ Deliverables:
 - Frame timing notes.
 - Final validation.
 - Session log.
-

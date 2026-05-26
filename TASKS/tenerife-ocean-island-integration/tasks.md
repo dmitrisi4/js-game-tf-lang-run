@@ -125,6 +125,7 @@ Acceptance:
 Status: In progress
 
 Tasks:
+- [x] Add a sandy gradual underwater slope around the island edge.
 - [ ] Add foam band driven by shoreline distance.
 - [ ] Add shallow-water tint near shore.
 - [ ] Add offshore darkening.
@@ -137,6 +138,16 @@ Acceptance:
 
 Notes:
 - `OceanSurface` now renders in group `0` and keeps depth writes enabled. This addresses the observed symptom where lowering `waterSurfaceY` did not change the apparent player submersion, because the transparent water was able to draw over nearer scene geometry.
+- Added `ShorelineSandSlope`, a visual-only terrain-derived sandy shelf mesh that descends from the waterline into shallow water without physics or picking.
+- Added `getShorelineSandSlopeConfig` and focused tests for shelf dimensions and gap rejection.
+- Increased the sand shelf shoreline overlap after screenshot QA showed a visible water gap between the shelf and the imported island terrain edge.
+
+Verification notes:
+- Passed: `bun run test -- src/scenes/environment/oceanVisualConfig.test.ts src/scenes/environment/ShorelineSandSlope.test.ts`.
+- Passed: `bun run check`.
+- Passed: `bun run build` with the existing large chunk warning.
+- Verified: `curl -I 'http://localhost:5173/?tenerife=1&terrain=island-full&oceanDebug=1'` returned `HTTP/1.1 200 OK`.
+- Browser screenshot QA was attempted but not completed in this session because the Browser plugin did not expose the required Node REPL tool, the DevTools MCP profile was already locked, and Playwright is not installed in this project.
 
 ## 7. Gameplay Safety Separation
 

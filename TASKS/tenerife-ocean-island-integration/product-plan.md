@@ -12,6 +12,7 @@ Players in full-island Tenerife mode should see a stable Atlantic ocean that sur
 - Ocean height is derived from measured terrain/coast data, not manually guessed from screenshots.
 - Player spawn near Puerto is visibly above the water plane with clear dry terrain underfoot.
 - Shoreline has a controlled transition:
+	- sandy gradual underwater slope around the island edge
 	- shallow cyan/turquoise water near shore
 	- darker Atlantic water offshore
 	- foam/whitewash at the coast
@@ -38,4 +39,3 @@ Players in full-island Tenerife mode should see a stable Atlantic ocean that sur
 4. Build a stable shoreline mask and ocean height model.
 5. Add foam/shallow/deep visual layers.
 6. Tune performance and visual quality.
-

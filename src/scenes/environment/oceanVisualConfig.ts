@@ -40,6 +40,13 @@ export type ShorelineSurfConfigType = {
 	surfWidth: number;
 };
 
+export type ShorelineSandSlopeConfigType = {
+	beachInset: number;
+	maxSegmentLength: number;
+	slopeWidth: number;
+	underwaterDrop: number;
+};
+
 const MIN_OCEAN_WAVE_SCALE = 18;
 const OCEAN_WAVE_SCALE_DIVISOR = 54;
 const OCEAN_WAVE_HEIGHT_DIVISOR = 1550;
@@ -51,6 +58,10 @@ const SHORELINE_SHALLOW_BAND_RATIO = 0.07;
 const SHORELINE_DEEP_BAND_RATIO = 0.22;
 const SHORELINE_SURF_WIDTH_RATIO = 0.042;
 const SHORELINE_SURF_BAND_SPACING_RATIO = 0.018;
+const SHORELINE_SAND_SLOPE_WIDTH_RATIO = 0.052;
+const SHORELINE_SAND_BEACH_INSET_RATIO = 0.045;
+const SHORELINE_SAND_UNDERWATER_DROP_RATIO = 0.0026;
+const SHORELINE_SAND_MAX_SEGMENT_MULTIPLIER = 2.2;
 
 /** Resolves the centered mesh metrics for a rectangular ocean surface. */
 export const getOceanSurfaceMetrics = (
@@ -117,5 +128,21 @@ export const getShorelineSurfConfig = (width: number, depth: number): ShorelineS
 		edgeRadiusZ: depth * SHORELINE_EDGE_RATIO_Z,
 		retreatSpeed: shortestSide * 0.012,
 		surfWidth: shortestSide * SHORELINE_SURF_WIDTH_RATIO,
+	};
+};
+
+/** Resolves the sandy underwater shelf dimensions for the current ocean footprint. */
+export const getShorelineSandSlopeConfig = (
+	width: number,
+	depth: number,
+): ShorelineSandSlopeConfigType => {
+	const shortestSide = Math.min(width, depth);
+	const slopeWidth = shortestSide * SHORELINE_SAND_SLOPE_WIDTH_RATIO;
+
+	return {
+		beachInset: shortestSide * SHORELINE_SAND_BEACH_INSET_RATIO,
+		maxSegmentLength: slopeWidth * SHORELINE_SAND_MAX_SEGMENT_MULTIPLIER,
+		slopeWidth,
+		underwaterDrop: shortestSide * SHORELINE_SAND_UNDERWATER_DROP_RATIO,
 	};
 };

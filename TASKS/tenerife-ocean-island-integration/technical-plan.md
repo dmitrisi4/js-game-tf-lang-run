@@ -137,6 +137,7 @@ Gate:
 Goal: make the coast believable.
 
 Implementation:
+- Add a terrain-derived sandy shoreline slope ribbon between the coast and shallow water.
 - Foam mask uses distance-to-coast and animated noise.
 - Shallow tint uses distance-to-coast plus terrain depth below waterline.
 - Deep water darkens offshore.
@@ -182,4 +183,3 @@ Gate:
 - Full island scale may make small Y changes visually irrelevant if camera clips/sorting are wrong.
 - WaterMaterial render targets can be too costly for full-island mode.
 - Shoreline mask can alias if sampled too coarsely.
-

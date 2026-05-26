@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import OceanSurface from './OceanSurface';
 import { shouldHideCustomOcean, updateOceanDebugState } from './ocean/oceanDebug';
 import ShorelineDepthFloor from './ShorelineDepthFloor';
+import ShorelineSandSlope from './ShorelineSandSlope';
 import ShorelineSurf from './ShorelineSurf';
 import {
 	TENERIFE_FULL_ISLAND_DEEP_WATER_RESET_Y,
@@ -43,6 +44,11 @@ const TenerifeOcean: React.FC<PropsType> = () => {
 		<>
 			{isCustomOceanHidden ? null : (
 				<>
+					<ShorelineSandSlope
+						bounds={TENERIFE_FULL_ISLAND_OCEAN_BOUNDS}
+						name='tenerife-full-island-shoreline-sand-slope'
+						surfaceY={TENERIFE_FULL_ISLAND_WATER_SURFACE_Y}
+					/>
 					<OceanSurface
 						bounds={TENERIFE_FULL_ISLAND_OCEAN_BOUNDS}
 						name='tenerife-full-island-ocean-surface'

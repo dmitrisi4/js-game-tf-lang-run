@@ -5,6 +5,7 @@ import {
 	getOceanSurfaceMetrics,
 	getOceanWaveScale,
 	getShorelineDepthGradientConfig,
+	getShorelineSandSlopeConfig,
 	getShorelineSurfConfig,
 } from './oceanVisualConfig';
 
@@ -66,5 +67,16 @@ describe('oceanVisualConfig', () => {
 		expect(surfConfig.surfWidth).toBeGreaterThan(surfConfig.bandSpacing);
 		expect(surfConfig.surfWidth).toBeLessThan(depthConfig.shallowEnd);
 		expect(surfConfig.retreatSpeed).toBeGreaterThan(0);
+	});
+
+	it('resolves a sandy underwater slope inside the shallow-water zone', () => {
+		const depthConfig = getShorelineDepthGradientConfig(2800, 2600);
+		const sandConfig = getShorelineSandSlopeConfig(2800, 2600);
+
+		expect(sandConfig.beachInset).toBeGreaterThan(80);
+		expect(sandConfig.slopeWidth).toBeGreaterThan(sandConfig.beachInset);
+		expect(sandConfig.slopeWidth).toBeLessThan(depthConfig.shallowEnd);
+		expect(sandConfig.underwaterDrop).toBeGreaterThan(0);
+		expect(sandConfig.maxSegmentLength).toBeGreaterThan(sandConfig.slopeWidth);
 	});
 });
