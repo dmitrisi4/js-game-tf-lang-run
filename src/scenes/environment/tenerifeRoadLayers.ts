@@ -1,5 +1,6 @@
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import type { RoadSurfaceType } from './roadSurfaceShader';
 import { getTerrainHeightAt } from './terrainData';
 import type { WorldBuilding, WorldBuildingModelId, WorldPosition } from './worldData';
 
@@ -30,6 +31,8 @@ export type TenerifeRoadLayerStyle = {
 	heightOffset: number;
 	id: TenerifeRoadLayerId;
 	label: string;
+	/** Procedural surface type used by the road surface shader. */
+	surfaceType: RoadSurfaceType;
 	width: number;
 };
 
@@ -109,6 +112,8 @@ export const TENERIFE_ROAD_LAYER_STYLES: Record<TenerifeRoadLayerId, TenerifeRoa
 		heightOffset: 0.015,
 		id: 'main',
 		label: 'Main roads',
+		// City main roads → cobblestone; rural → dirt (resolved in shader)
+		surfaceType: 'cobblestone',
 		width: 3.4,
 	},
 	service: {
@@ -116,6 +121,7 @@ export const TENERIFE_ROAD_LAYER_STYLES: Record<TenerifeRoadLayerId, TenerifeRoa
 		heightOffset: 0.018,
 		id: 'service',
 		label: 'Service roads',
+		surfaceType: 'dirt',
 		width: 1.9,
 	},
 	walk: {
@@ -123,6 +129,7 @@ export const TENERIFE_ROAD_LAYER_STYLES: Record<TenerifeRoadLayerId, TenerifeRoa
 		heightOffset: 0.02,
 		id: 'walk',
 		label: 'Walk paths',
+		surfaceType: 'earth',
 		width: 1.25,
 	},
 };

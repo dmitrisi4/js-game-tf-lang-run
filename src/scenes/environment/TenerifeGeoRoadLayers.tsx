@@ -7,6 +7,7 @@ import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useBeforeRender, useScene } from 'react-babylonjs';
+import { createRoadSurfaceMaterial, getRoadSurfaceType } from './roadSurfaceShader';
 import { isTenerifeFullIslandTerrainMeshName } from './tenerifeFullIslandConfig';
 import { measureTenerifeSyncStep } from './tenerifePerformance';
 import {
@@ -197,11 +198,20 @@ export const transformTenerifeRoadPoint = (
 	);
 };
 
-const createRoadRibbonMesh = (
+/**
+ * Builds ribbon geometry with along-road UV coords for texture splatting.
+ *
+ * UV layout:
+ * - uv.x (cross-road): 0 = left edge, 0.5 = centerline, 1 = right edge
+ * - uv.y (along-road): accumulated world-unit distance along the centerline,
+ *   consumed by the shader as `y * uAlongTile` for tiling
+ */
+const createRoadRibbonMeshWithUv = (
 	name: string,
 	lines: Vector3[][],
 	width: number,
-	color: Color3,
+	layerId: TenerifeRoadLayerId,
+	isInsideCity: boolean,
 	scene: NonNullable<ReturnType<typeof useScene>>,
 	roadTransform?: TenerifeRoadTransformType,
 	groundHeightProvider?: GroundHeightProviderType,
@@ -213,9 +223,13 @@ const createRoadRibbonMesh = (
 		const halfWidth = renderWidth / 2;
 		const positions: number[] = [];
 		const indices: number[] = [];
+		const uvs: number[] = [];
 		let vertexIndex = 0;
+		let accumulatedDistance = 0;
 
 		for (const line of lines) {
+			accumulatedDistance = 0;
+
 			for (let pointIndex = 0; pointIndex < line.length - 1; pointIndex += 1) {
 				const from = transformTenerifeRoadPoint(line[pointIndex], roadTransform);
 				const to = transformTenerifeRoadPoint(line[pointIndex + 1], roadTransform);
@@ -264,6 +278,20 @@ const createRoadRibbonMesh = (
 					toLeft.z,
 				);
 
+				// UV: cross-road 0..1, along-road accumulated distance
+				const nextDist = accumulatedDistance + length;
+				uvs.push(
+					0.0,
+					accumulatedDistance, // fromLeft
+					1.0,
+					accumulatedDistance, // fromRight
+					1.0,
+					nextDist, // toRight
+					0.0,
+					nextDist, // toLeft
+				);
+				accumulatedDistance = nextDist;
+
 				indices.push(
 					vertexIndex,
 					vertexIndex + 1,
@@ -288,15 +316,39 @@ const createRoadRibbonMesh = (
 		vertexData.positions = positions;
 		vertexData.indices = indices;
 		vertexData.normals = normals;
+		vertexData.uvs = uvs;
 		vertexData.applyToMesh(mesh);
 
-		const material = new StandardMaterial(`${name}-material`, scene);
-		material.backFaceCulling = false;
-		material.diffuseColor = color;
-		material.emissiveColor = color.scale(0.18);
-		material.specularColor = Color3.FromHexString('#15120f');
-		material.freeze();
-		mesh.material = material;
+		// Use procedural surface shader for surface passes; plain material for
+		// shoulder and centerline passes that are purely decorative color strips.
+		const isSurfacePass = name.endsWith('-surface');
+		if (isSurfacePass) {
+			const surfaceType = getRoadSurfaceType(layerId, isInsideCity);
+			const material = createRoadSurfaceMaterial(name, surfaceType, scene);
+			mesh.material = material;
+		} else {
+			// Shoulder and centerline keep simple emissive colors for contrast
+			const material = new StandardMaterial(`${name}-material`, scene);
+			material.backFaceCulling = false;
+
+			// Shoulders: earthy warm sand, centerline: removed for dirt roads
+			if (name.endsWith('-shoulder')) {
+				material.diffuseColor = isInsideCity
+					? Color3.FromHexString('#968672')
+					: Color3.FromHexString('#7a6a4a');
+				material.emissiveColor = material.diffuseColor.scale(0.12);
+			} else {
+				// centerline: only visible in city cobblestone context
+				material.diffuseColor = isInsideCity
+					? Color3.FromHexString('#c8b05a')
+					: Color3.FromHexString('#7a6a4a');
+				material.emissiveColor = material.diffuseColor.scale(0.1);
+			}
+			material.specularColor = Color3.FromHexString('#15120f');
+			material.freeze();
+			mesh.material = material;
+		}
+
 		mesh.isPickable = false;
 		mesh.doNotSyncBoundingInfo = true;
 		mesh.freezeWorldMatrix();
@@ -308,8 +360,11 @@ const createRoadRibbonMesh = (
 /**
  * Renders Puerto de la Cruz OSM roads from the exported GeoJSON file.
  *
- * The source is split into three visual layers so gameplay can tune road,
- * walking, and service readability independently.
+ * Roads use procedural ShaderMaterial:
+ * - City main roads → Voronoi cobblestone (warm grey Canarian stone)
+ * - Rural main / service roads → dirt track with ruts (warm volcanic earth)
+ * - Walk paths → packed earth
+ * - All surfaces fade to terrain color at edges via alpha blending
  */
 const TenerifeGeoRoadLayers: React.FC<PropsType> = ({
 	groundHeightProvider,
@@ -351,11 +406,26 @@ const TenerifeGeoRoadLayers: React.FC<PropsType> = ({
 			.filter((layer) => layer.lines.length > 0)
 			.flatMap((layer) =>
 				getTenerifeRoadVisualPasses(layer.id, layer.width, layer.color).flatMap((pass) => {
-					const mesh = createRoadRibbonMesh(
+					// For each pass, determine the representative segment midpoint to
+					// decide city vs rural context. We sample the first segment midpoint.
+					const firstLine = layer.lines[0];
+					const segMid =
+						firstLine && firstLine.length >= 2
+							? {
+									x: (firstLine[0].x + firstLine[1].x) / 2,
+									z: (firstLine[0].z + firstLine[1].z) / 2,
+								}
+							: { x: 0, z: 0 };
+					const isInsideCity = roadTransform
+						? true // transformed layers are always city context
+						: isInsideTenerifeCityFootprint(segMid);
+
+					const mesh = createRoadRibbonMeshWithUv(
 						`tenerife-geo-roads-${layer.id}-${pass.nameSuffix}`,
 						layer.lines,
 						pass.width,
-						pass.color,
+						layer.id,
+						isInsideCity,
 						scene,
 						roadTransform,
 						groundHeightProvider,
