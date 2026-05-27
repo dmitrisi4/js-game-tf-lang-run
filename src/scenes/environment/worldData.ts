@@ -1,3 +1,5 @@
+import { selectNonOverlappingBuildings } from './worldPlacementValidation';
+
 export type WorldPosition = {
 	x: number;
 	z: number;
@@ -360,7 +362,7 @@ export const WORLD_BUILDINGS: WorldBuilding[] = [
 	},
 ];
 
-export const TENERIFE_PREVIEW_BUILDINGS: WorldBuilding[] = [
+const TENERIFE_PREVIEW_BUILDINGS_RAW: WorldBuilding[] = [
 	{
 		id: 'tenerife-osm-building-01',
 		modelId: 'house-1',
@@ -668,6 +670,11 @@ export const TENERIFE_PREVIEW_BUILDINGS: WorldBuilding[] = [
 		collider: { width: 4.8, height: 3.8, depth: 4.1 },
 	},
 ];
+
+export const TENERIFE_PREVIEW_BUILDINGS: WorldBuilding[] = selectNonOverlappingBuildings(
+	TENERIFE_PREVIEW_BUILDINGS_RAW,
+	0.75,
+);
 
 export const TENERIFE_PREVIEW_ROADS: WorldRoad[] = [
 	{
@@ -1089,7 +1096,7 @@ export const TENERIFE_PREVIEW_ROADS: WorldRoad[] = [
 export const WORLD_ROCKS: WorldRock[] = [
 	{
 		id: 'rock-ridge-01',
-		position: { x: -36, z: 19 },
+		position: { x: -33, z: 24 },
 		scale: { x: 1.6, y: 0.8, z: 1.2 },
 		color: '#747066',
 	},

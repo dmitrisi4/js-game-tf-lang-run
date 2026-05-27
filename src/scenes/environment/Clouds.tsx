@@ -1,3 +1,4 @@
+import { Engine } from '@babylonjs/core/Engines/engine';
 import { Effect } from '@babylonjs/core/Materials/effect';
 import { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
@@ -140,19 +141,19 @@ const Clouds: React.FC = () => {
 			},
 		);
 
-		cloudsMaterial.backFaceCulling = true; // We are inside it, wait we should see the back face if we are inside
+		cloudsMaterial.backFaceCulling = true;
 		cloudsMaterial.disableDepthWrite = true;
 		cloudsMaterial.setColor3('cloudColor', Color3.FromHexString('#ffffff'));
 		cloudsMaterial.setFloat('time', 0);
-		cloudsMaterial.alphaMode = 2; // BABYLON.Engine.ALPHA_COMBINE
+		cloudsMaterial.alphaMode = Engine.ALPHA_COMBINE;
 
 		cloudsDome.material = cloudsMaterial;
 		cloudsDome.infiniteDistance = true;
 		cloudsDome.isPickable = false;
 		cloudsDome.doNotSyncBoundingInfo = true;
-		cloudsDome.renderingGroupId = 1; // Render after the sky (which is 0)
+		cloudsDome.renderingGroupId = 0;
 
-		// Flip faces so we see the inside of the sphere
+		// The player is inside the dome, so the visible face direction is inward.
 		cloudsDome.flipFaces();
 
 		let observer: Observer<BabylonScene> | null = null;

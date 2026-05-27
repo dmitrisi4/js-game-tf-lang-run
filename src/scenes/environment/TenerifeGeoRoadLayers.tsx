@@ -28,9 +28,22 @@ type GroundHeightProviderType = (position: WorldPosition) => number | null;
 type RoadHeightCacheType = Map<string, number | null>;
 type RoadVisualPassType = {
 	color: Color3;
+	hasJunctionPads: boolean;
 	nameSuffix: string;
 	surfaceBias: number;
 	width: number;
+};
+export type RoadRibbonPointType = {
+	alongDistance: number;
+	position: Vector3;
+};
+type RoadRibbonGeometryType = {
+	indices: number[];
+	positions: number[];
+	uvs: number[];
+};
+export type RoadJunctionPointType = {
+	position: Vector3;
 };
 
 export type TenerifeRoadTransformType = {
@@ -56,6 +69,7 @@ const ROAD_SHOULDER_COLOR = Color3.FromHexString('#b0a186');
 const ROAD_MAIN_SURFACE_COLOR = Color3.FromHexString('#3f3c36');
 const ROAD_SERVICE_SURFACE_COLOR = Color3.FromHexString('#746a5b');
 const ROAD_CENTER_LINE_COLOR = Color3.FromHexString('#d8c66d');
+const ROAD_JUNCTION_SEGMENTS = 14;
 
 export const getTenerifeRoadRenderWidth = (
 	width: number,
@@ -137,18 +151,21 @@ export const getTenerifeRoadVisualPasses = (
 		return [
 			{
 				color: ROAD_SHOULDER_COLOR,
+				hasJunctionPads: true,
 				nameSuffix: 'shoulder',
 				surfaceBias: 0.06,
 				width: width * 1.35,
 			},
 			{
 				color: ROAD_MAIN_SURFACE_COLOR,
+				hasJunctionPads: true,
 				nameSuffix: 'surface',
 				surfaceBias: 0.1,
 				width,
 			},
 			{
 				color: ROAD_CENTER_LINE_COLOR,
+				hasJunctionPads: false,
 				nameSuffix: 'centerline',
 				surfaceBias: 0.15,
 				width: Math.max(0.36, width * 0.08),
@@ -160,12 +177,14 @@ export const getTenerifeRoadVisualPasses = (
 		return [
 			{
 				color: ROAD_SHOULDER_COLOR.scale(0.9),
+				hasJunctionPads: true,
 				nameSuffix: 'shoulder',
 				surfaceBias: 0.06,
 				width: width * 1.22,
 			},
 			{
 				color: ROAD_SERVICE_SURFACE_COLOR,
+				hasJunctionPads: true,
 				nameSuffix: 'surface',
 				surfaceBias: 0.1,
 				width: width * 0.88,
@@ -176,6 +195,7 @@ export const getTenerifeRoadVisualPasses = (
 	return [
 		{
 			color,
+			hasJunctionPads: true,
 			nameSuffix: 'surface',
 			surfaceBias: 0.1,
 			width,
@@ -199,6 +219,170 @@ export const transformTenerifeRoadPoint = (
 	);
 };
 
+const getRoadRibbonPointNormal = (
+	points: RoadRibbonPointType[],
+	index: number,
+): { x: number; z: number } => {
+	const current = points[index].position;
+	const previous = points[index - 1]?.position;
+	const next = points[index + 1]?.position;
+	const incoming = previous
+		? {
+				x: current.x - previous.x,
+				z: current.z - previous.z,
+			}
+		: null;
+	const outgoing = next
+		? {
+				x: next.x - current.x,
+				z: next.z - current.z,
+			}
+		: null;
+	const incomingLength = incoming ? Math.hypot(incoming.x, incoming.z) : 0;
+	const outgoingLength = outgoing ? Math.hypot(outgoing.x, outgoing.z) : 0;
+	const incomingUnit = incoming && incomingLength > 0 ? incoming : null;
+	const outgoingUnit = outgoing && outgoingLength > 0 ? outgoing : null;
+	const tangent = {
+		x:
+			(incomingUnit ? incomingUnit.x / incomingLength : 0) +
+			(outgoingUnit ? outgoingUnit.x / outgoingLength : 0),
+		z:
+			(incomingUnit ? incomingUnit.z / incomingLength : 0) +
+			(outgoingUnit ? outgoingUnit.z / outgoingLength : 0),
+	};
+	const tangentLength = Math.hypot(tangent.x, tangent.z);
+
+	if (tangentLength > 0.001) {
+		return {
+			x: -tangent.z / tangentLength,
+			z: tangent.x / tangentLength,
+		};
+	}
+
+	const fallback = outgoingLength > 0 ? outgoing : incoming;
+	const fallbackLength = fallback ? Math.hypot(fallback.x, fallback.z) : 0;
+
+	if (!fallback || fallbackLength <= 0.001) {
+		return { x: 1, z: 0 };
+	}
+
+	return {
+		x: -fallback.z / fallbackLength,
+		z: fallback.x / fallbackLength,
+	};
+};
+
+/**
+ * Builds one continuous road strip from centerline samples.
+ */
+export const buildRoadRibbonGeometry = (
+	points: RoadRibbonPointType[],
+	width: number,
+	startVertexIndex = 0,
+): RoadRibbonGeometryType => {
+	const halfWidth = width / 2;
+	const positions: number[] = [];
+	const indices: number[] = [];
+	const uvs: number[] = [];
+
+	for (let index = 0; index < points.length; index += 1) {
+		const point = points[index];
+		const normal = getRoadRibbonPointNormal(points, index);
+		const left = {
+			x: point.position.x + normal.x * halfWidth,
+			z: point.position.z + normal.z * halfWidth,
+		};
+		const right = {
+			x: point.position.x - normal.x * halfWidth,
+			z: point.position.z - normal.z * halfWidth,
+		};
+
+		positions.push(left.x, point.position.y, left.z, right.x, point.position.y, right.z);
+		uvs.push(0, point.alongDistance, 1, point.alongDistance);
+
+		if (index < points.length - 1) {
+			const vertexIndex = startVertexIndex + index * 2;
+			indices.push(
+				vertexIndex,
+				vertexIndex + 1,
+				vertexIndex + 3,
+				vertexIndex,
+				vertexIndex + 3,
+				vertexIndex + 2,
+			);
+		}
+	}
+
+	return { indices, positions, uvs };
+};
+
+/**
+ * Builds round pads that cover joins between independent OSM road ways.
+ */
+export const buildRoadJunctionGeometry = (
+	points: RoadJunctionPointType[],
+	radius: number,
+	startVertexIndex = 0,
+	segments = ROAD_JUNCTION_SEGMENTS,
+): RoadRibbonGeometryType => {
+	const positions: number[] = [];
+	const indices: number[] = [];
+	const uvs: number[] = [];
+	let vertexIndex = startVertexIndex;
+
+	for (const point of points) {
+		positions.push(point.position.x, point.position.y, point.position.z);
+		uvs.push(0.5, 0.5);
+
+		for (let segmentIndex = 0; segmentIndex < segments; segmentIndex += 1) {
+			const angle = (segmentIndex / segments) * Math.PI * 2;
+			const x = point.position.x + Math.cos(angle) * radius;
+			const z = point.position.z + Math.sin(angle) * radius;
+
+			positions.push(x, point.position.y, z);
+			uvs.push(0.5 + Math.cos(angle) * 0.5, 0.5 + Math.sin(angle) * 0.5);
+		}
+
+		for (let segmentIndex = 0; segmentIndex < segments; segmentIndex += 1) {
+			const current = vertexIndex + 1 + segmentIndex;
+			const next = vertexIndex + 1 + ((segmentIndex + 1) % segments);
+			indices.push(vertexIndex, current, next);
+		}
+
+		vertexIndex += segments + 1;
+	}
+
+	return { indices, positions, uvs };
+};
+
+const getRoadJunctionKey = (position: { x: number; z: number }): string =>
+	`${position.x.toFixed(1)}:${position.z.toFixed(1)}`;
+
+const collectRoadJunctionCandidates = (
+	lines: Vector3[][],
+	roadTransform?: TenerifeRoadTransformType,
+): Vector3[] => {
+	const candidatesByKey = new Map<string, { count: number; point: Vector3 }>();
+
+	for (const line of lines) {
+		for (const point of line) {
+			const transformedPoint = transformTenerifeRoadPoint(point, roadTransform);
+			const key = getRoadJunctionKey(transformedPoint);
+			const current = candidatesByKey.get(key);
+
+			if (current) {
+				current.count += 1;
+			} else {
+				candidatesByKey.set(key, { count: 1, point: transformedPoint });
+			}
+		}
+	}
+
+	return Array.from(candidatesByKey.values())
+		.filter((candidate) => candidate.count >= 2)
+		.map((candidate) => candidate.point);
+};
+
 /**
  * Builds ribbon geometry with along-road UV coords for texture splatting.
  *
@@ -218,18 +402,34 @@ const createRoadRibbonMeshWithUv = (
 	groundHeightProvider?: GroundHeightProviderType,
 	surfaceBias = ROAD_SURFACE_BIAS,
 	heightCache?: RoadHeightCacheType,
+	includeJunctionPads = true,
 ): Mesh | null => {
 	return measureTenerifeSyncStep(`Road mesh creation: ${name}`, () => {
 		const renderWidth = getTenerifeRoadRenderWidth(width, roadTransform);
-		const halfWidth = renderWidth / 2;
 		const positions: number[] = [];
 		const indices: number[] = [];
 		const uvs: number[] = [];
 		let vertexIndex = 0;
-		let accumulatedDistance = 0;
 
 		for (const line of lines) {
-			accumulatedDistance = 0;
+			let currentRibbon: RoadRibbonPointType[] = [];
+			let accumulatedDistance = 0;
+
+			const flushRibbon = () => {
+				if (currentRibbon.length < 2) {
+					currentRibbon = [];
+					accumulatedDistance = 0;
+					return;
+				}
+
+				const geometry = buildRoadRibbonGeometry(currentRibbon, renderWidth, vertexIndex);
+				positions.push(...geometry.positions);
+				uvs.push(...geometry.uvs);
+				indices.push(...geometry.indices);
+				vertexIndex += currentRibbon.length * 2;
+				currentRibbon = [];
+				accumulatedDistance = 0;
+			};
 
 			for (let pointIndex = 0; pointIndex < line.length - 1; pointIndex += 1) {
 				const from = transformTenerifeRoadPoint(line[pointIndex], roadTransform);
@@ -248,69 +448,63 @@ const createRoadRibbonMeshWithUv = (
 					!isTenerifeRoadPointInsideClip(from, roadTransform) ||
 					!isTenerifeRoadPointInsideClip(to, roadTransform)
 				) {
+					flushRibbon();
 					continue;
 				}
 
-				const nx = (-dz / length) * halfWidth;
-				const nz = (dx / length) * halfWidth;
-
-				// Extend each segment by halfWidth in both travel directions so that
-				// adjacent quads overlap at bends — this closes the triangular gap
-				// that appears at each segment joint on curved road polylines.
-				const extX = (dx / length) * halfWidth;
-				const extZ = (dz / length) * halfWidth;
-				const fromExt = { x: from.x - extX, z: from.z - extZ };
-				const toExt = { x: to.x + extX, z: to.z + extZ };
-
-				const fromLeft = { x: fromExt.x + nx, z: fromExt.z + nz };
-				const fromRight = { x: fromExt.x - nx, z: fromExt.z - nz };
-				const toRight = { x: toExt.x - nx, z: toExt.z - nz };
-				const toLeft = { x: toExt.x + nx, z: toExt.z + nz };
 				const fromY = getRoadSurfaceHeight(from, scene, groundHeightProvider, surfaceBias, heightCache);
 				const toY = getRoadSurfaceHeight(to, scene, groundHeightProvider, surfaceBias, heightCache);
 
 				if (fromY === null || toY === null) {
+					flushRibbon();
 					continue;
 				}
 
-				positions.push(
-					fromLeft.x,
-					fromY,
-					fromLeft.z,
-					fromRight.x,
-					fromY,
-					fromRight.z,
-					toRight.x,
-					toY,
-					toRight.z,
-					toLeft.x,
-					toY,
-					toLeft.z,
-				);
+				if (currentRibbon.length === 0) {
+					currentRibbon.push({
+						alongDistance: 0,
+						position: new Vector3(from.x, fromY, from.z),
+					});
+				}
 
-				// UV: cross-road 0..1, along-road accumulated distance
-				const nextDist = accumulatedDistance + length;
-				uvs.push(
-					0.0,
-					accumulatedDistance, // fromLeft
-					1.0,
-					accumulatedDistance, // fromRight
-					1.0,
-					nextDist, // toRight
-					0.0,
-					nextDist, // toLeft
-				);
-				accumulatedDistance = nextDist;
+				accumulatedDistance += length;
+				currentRibbon.push({
+					alongDistance: accumulatedDistance,
+					position: new Vector3(to.x, toY, to.z),
+				});
+			}
 
-				indices.push(
-					vertexIndex,
-					vertexIndex + 1,
-					vertexIndex + 2,
-					vertexIndex,
-					vertexIndex + 2,
-					vertexIndex + 3,
-				);
-				vertexIndex += 4;
+			flushRibbon();
+		}
+
+		if (includeJunctionPads) {
+			const junctionPoints: RoadJunctionPointType[] = [];
+
+			for (const point of collectRoadJunctionCandidates(lines, roadTransform)) {
+				if (
+					(!roadTransform && !isInsideTenerifeCityFootprint(point)) ||
+					!isTenerifeRoadPointInsideClip(point, roadTransform)
+				) {
+					continue;
+				}
+
+				const y = getRoadSurfaceHeight(point, scene, groundHeightProvider, surfaceBias, heightCache);
+
+				if (y === null) {
+					continue;
+				}
+
+				junctionPoints.push({
+					position: new Vector3(point.x, y, point.z),
+				});
+			}
+
+			if (junctionPoints.length > 0) {
+				const geometry = buildRoadJunctionGeometry(junctionPoints, renderWidth * 0.58, vertexIndex);
+				positions.push(...geometry.positions);
+				uvs.push(...geometry.uvs);
+				indices.push(...geometry.indices);
+				vertexIndex += junctionPoints.length * (ROAD_JUNCTION_SEGMENTS + 1);
 			}
 		}
 
@@ -441,6 +635,7 @@ const TenerifeGeoRoadLayers: React.FC<PropsType> = ({
 						groundHeightProvider,
 						pass.surfaceBias,
 						heightCache,
+						pass.hasJunctionPads,
 					);
 
 					return mesh ? [mesh] : [];

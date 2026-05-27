@@ -5,6 +5,8 @@ const TEXTURE_SIZE = Number(
 	process.argv.includes('--size') ? process.argv[process.argv.indexOf('--size') + 1] : 2048,
 );
 const ALBEDO_PATH = 'public/textures/tenerife/puerto-city-albedo.png';
+const NORMAL_PATH = 'public/textures/tenerife/puerto-city-normal.png';
+const ORM_PATH = 'public/textures/tenerife/puerto-city-orm.png';
 const ROAD_MASK_PATH = 'public/textures/tenerife/puerto-city-road-mask.png';
 const CONTACT_SHEET_PATH = 'public/textures/tenerife/puerto-city-contact-sheet.png';
 
@@ -12,6 +14,12 @@ const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
 const blendColor = (from, to, t) =>
 	from.map((channel, index) => Math.round(channel * (1 - t) + to[index] * t));
+
+const deterministicNoise = (x, y, seed = 0) => {
+	const value = Math.sin(x * 12.9898 + y * 78.233 + seed * 37.719) * 43758.5453;
+
+	return value - Math.floor(value);
+};
 
 const getPixelIndex = (width, x, y) => (y * width + x) * 4;
 
@@ -152,7 +160,7 @@ const drawThickLine = (buffer, size, start, end, radius, color, alpha = 1) => {
 	}
 };
 
-const drawRoadMaskLine = (buffer, size, start, end, radius, channel) => {
+const drawRoadMaskLine = (buffer, size, start, end, radius, channel, valueMultiplier = 255) => {
 	const minX = Math.max(0, Math.floor(Math.min(start.x, end.x) - radius - 2));
 	const maxX = Math.min(size - 1, Math.ceil(Math.max(start.x, end.x) + radius + 2));
 	const minY = Math.max(0, Math.floor(Math.min(start.y, end.y) - radius - 2));
@@ -165,8 +173,10 @@ const drawRoadMaskLine = (buffer, size, start, end, radius, channel) => {
 
 			if (coverage > 0) {
 				const index = getPixelIndex(size, x, y);
-				buffer[index + channel] = Math.max(buffer[index + channel], Math.round(coverage * 255));
-				buffer[index + 3] = 255;
+				buffer[index + channel] = Math.max(
+					buffer[index + channel],
+					Math.round(coverage * valueMultiplier),
+				);
 			}
 		}
 	}
@@ -235,9 +245,108 @@ const drawRoads = (albedo, roadMask, size, layers, worldToPixel) => {
 
 			drawThickLine(albedo, size, start, end, shoulderRadius, [142, 129, 104, 255], 0.62);
 			drawThickLine(albedo, size, start, end, radius, style.color, 0.9);
+			drawRoadMaskLine(roadMask, size, start, end, shoulderRadius, 3, 224);
 			drawRoadMaskLine(roadMask, size, start, end, radius, style.maskChannel);
 		}
 	}
+};
+
+const getRoadCoverage = (roadMask, size, x, y) => {
+	const index = getPixelIndex(size, x, y);
+	const main = roadMask[index] / 255;
+	const service = roadMask[index + 1] / 255;
+	const walk = roadMask[index + 2] / 255;
+	const shoulder = roadMask[index + 3] / 255;
+
+	return {
+		core: Math.max(main, service, walk),
+		main,
+		service,
+		shoulder,
+		walk,
+	};
+};
+
+const createOrmTexture = (roadMask, size) => {
+	const orm = new Uint8Array(size * size * 4);
+
+	for (let y = 0; y < size; y += 1) {
+		for (let x = 0; x < size; x += 1) {
+			const index = getPixelIndex(size, x, y);
+			const coverage = getRoadCoverage(roadMask, size, x, y);
+			const roadCore = coverage.core;
+			const disturbedGround = Math.max(coverage.shoulder - roadCore * 0.65, 0);
+			const grain = deterministicNoise(x * 0.41, y * 0.37, 3);
+			const patch = deterministicNoise(Math.floor(x / 19), Math.floor(y / 19), 4);
+			const roadRoughness = coverage.main * 184 + coverage.service * 208 + coverage.walk * 224;
+			const terrainRoughness = 232 + grain * 10;
+			const blendedRoughness =
+				terrainRoughness * (1 - roadCore) +
+				roadRoughness * roadCore +
+				disturbedGround * 10 -
+				patch * roadCore * 8;
+			const ambientOcclusion = 238 - roadCore * 18 - disturbedGround * 12 - patch * roadCore * 9;
+
+			orm[index] = clamp(Math.round(ambientOcclusion), 0, 255);
+			orm[index + 1] = clamp(Math.round(blendedRoughness), 0, 255);
+			orm[index + 2] = 0;
+			orm[index + 3] = 255;
+		}
+	}
+
+	return orm;
+};
+
+const createDetailHeightField = (roadMask, size, bounds) => {
+	const height = new Float32Array(size * size);
+	const pixelToWorld = createPixelToWorld(bounds, size);
+
+	for (let y = 0; y < size; y += 1) {
+		for (let x = 0; x < size; x += 1) {
+			const world = pixelToWorld(x, y);
+			const coverage = getRoadCoverage(roadMask, size, x, y);
+			const roadCore = coverage.core;
+			const disturbedGround = Math.max(coverage.shoulder - roadCore * 0.65, 0);
+			const coarseNoise =
+				Math.sin(world.x * 0.42 + world.z * 0.31) * 0.012 +
+				Math.cos(world.x * 0.19 - world.z * 0.27) * 0.01;
+			const asphaltGrain =
+				(deterministicNoise(x * 1.7, y * 1.7, 7) - 0.5) * 0.034 +
+				(deterministicNoise(x * 0.43, y * 0.43, 8) - 0.5) * 0.022;
+			const shoulderRoughness = (deterministicNoise(x * 0.61, y * 0.61, 9) - 0.5) * 0.045;
+
+			height[y * size + x] =
+				coarseNoise * (1 - roadCore) + asphaltGrain * roadCore + shoulderRoughness * disturbedGround;
+		}
+	}
+
+	return height;
+};
+
+const createNormalTexture = (roadMask, size, bounds) => {
+	const detailHeight = createDetailHeightField(roadMask, size, bounds);
+	const normal = new Uint8Array(size * size * 4);
+	const sample = (x, y) => detailHeight[clamp(y, 0, size - 1) * size + clamp(x, 0, size - 1)];
+	const strength = 7.5;
+
+	for (let y = 0; y < size; y += 1) {
+		for (let x = 0; x < size; x += 1) {
+			const dx = (sample(x + 1, y) - sample(x - 1, y)) * strength;
+			const dy = (sample(x, y + 1) - sample(x, y - 1)) * strength;
+			const length = Math.hypot(dx, dy, 1);
+			const nx = -dx / length;
+			const ny = -dy / length;
+			const nz = 1 / length;
+			const index = getPixelIndex(size, x, y);
+
+			normal[index] = clamp(Math.round((nx * 0.5 + 0.5) * 255), 0, 255);
+			normal[index + 1] = clamp(Math.round((ny * 0.5 + 0.5) * 255), 0, 255);
+			normal[index + 2] = clamp(Math.round((nz * 0.5 + 0.5) * 255), 0, 255);
+			normal[index + 3] = 255;
+		}
+	}
+
+	return normal;
 };
 
 const getRoadPixelWidths = (layers, size) => {
@@ -257,7 +366,7 @@ const getRoadPixelWidths = (layers, size) => {
 	);
 };
 
-const createContactSheet = (albedo, roadMask, size) => {
+const createContactSheet = (albedo, roadMask, orm, normal, size) => {
 	const sheetSize = 1024;
 	const half = sheetSize / 2;
 	const sheet = new Uint8Array(sheetSize * sheetSize * 4);
@@ -265,8 +374,9 @@ const createContactSheet = (albedo, roadMask, size) => {
 	for (let y = 0; y < sheetSize; y += 1) {
 		for (let x = 0; x < sheetSize; x += 1) {
 			const sourceX = Math.floor(((x % half) / half) * size);
-			const sourceY = Math.floor((y / sheetSize) * size);
-			const source = x < half ? albedo : roadMask;
+			const sourceY = Math.floor(((y % half) / half) * size);
+			const source =
+				x < half && y < half ? albedo : x >= half && y < half ? roadMask : x < half ? orm : normal;
 			const sourceIndex = getPixelIndex(size, sourceX, sourceY);
 			const targetIndex = getPixelIndex(sheetSize, x, y);
 			sheet[targetIndex] = source[sourceIndex];
@@ -286,18 +396,18 @@ const main = async () => {
 	const roadMask = new Uint8Array(TEXTURE_SIZE * TEXTURE_SIZE * 4);
 	const worldToPixel = createWorldToPixel(dem.worldBounds, TEXTURE_SIZE);
 
-	for (let index = 0; index < roadMask.length; index += 4) {
-		roadMask[index + 3] = 255;
-	}
-
 	initializeAlbedo(albedo, dem, TEXTURE_SIZE);
 	drawLanduse(albedo, TEXTURE_SIZE, layers, worldToPixel);
 	drawBuildings(albedo, TEXTURE_SIZE, layers, worldToPixel);
 	drawRoads(albedo, roadMask, TEXTURE_SIZE, layers, worldToPixel);
 
-	const contactSheet = createContactSheet(albedo, roadMask, TEXTURE_SIZE);
+	const orm = createOrmTexture(roadMask, TEXTURE_SIZE);
+	const normal = createNormalTexture(roadMask, TEXTURE_SIZE, dem.worldBounds);
+	const contactSheet = createContactSheet(albedo, roadMask, orm, normal, TEXTURE_SIZE);
 
 	await writePng(resolveRepoPath(ALBEDO_PATH), TEXTURE_SIZE, TEXTURE_SIZE, albedo);
+	await writePng(resolveRepoPath(ORM_PATH), TEXTURE_SIZE, TEXTURE_SIZE, orm);
+	await writePng(resolveRepoPath(NORMAL_PATH), TEXTURE_SIZE, TEXTURE_SIZE, normal);
 	await writePng(resolveRepoPath(ROAD_MASK_PATH), TEXTURE_SIZE, TEXTURE_SIZE, roadMask);
 	await writePng(resolveRepoPath(CONTACT_SHEET_PATH), 1024, 1024, contactSheet);
 	await writeJson(PATHS.textureMetadata, {
@@ -305,8 +415,35 @@ const main = async () => {
 		albedoPath: ALBEDO_PATH,
 		contactSheetPath: CONTACT_SHEET_PATH,
 		generatedAt: new Date().toISOString(),
+		materialMaps: {
+			albedo: {
+				classification: 'color-srgb',
+				path: ALBEDO_PATH,
+			},
+			normal: {
+				classification: 'data-linear',
+				path: NORMAL_PATH,
+				usage: 'subtle terrain and road detail normal map',
+			},
+			orm: {
+				channels: {
+					blue: 'metallic; black for terrain and asphalt',
+					green: 'roughness',
+					red: 'ambient occlusion',
+				},
+				classification: 'data-linear',
+				path: ORM_PATH,
+			},
+			roadMask: {
+				classification: 'data-linear',
+				path: ROAD_MASK_PATH,
+			},
+		},
+		normalPath: NORMAL_PATH,
+		ormPath: ORM_PATH,
 		roadMaskPath: ROAD_MASK_PATH,
 		roadMaskChannels: {
+			alpha: 'shoulder and disturbed ground falloff',
 			blue: 'walk paths',
 			green: 'service roads',
 			red: 'main roads',

@@ -139,6 +139,8 @@ Final target:
 Prototype target:
 - `2048 x 2048` albedo atlas for the city patch.
 - `2048 x 2048` road mask if roads are mixed in shader/material.
+- `2048 x 2048` ORM texture with ambient occlusion in red, roughness in green, and metallic kept black.
+- `2048 x 2048` detail normal texture for road and shoulder micro-variation.
 - `1024 x 1024` contact sheet for albedo/mask QA.
 - Mipmaps enabled for all world textures.
 
@@ -162,3 +164,37 @@ Add deterministic tests for:
 - texture UV to world coordinate mapping
 - road width in pixels vs road width in world units
 - building footprint extraction and centroid placement
+
+## Phase 7 Roadbed And PBR Material Pass
+
+References used:
+- `docs/history/logs/2026-05-27-road-terrain-photoreal-research.md`
+- Unreal Landscape Splines and Unity Terrain Stamp references from the research log.
+- Babylon PBR material and texture usage already present in `TerrainGround.tsx` and `TenerifeIslandPreview.tsx`.
+
+Goal:
+- Make roads affect generated terrain height and runtime material response while keeping physics authority on `ground1`.
+
+Implementation:
+- Extend `scripts/geo/prepare_puerto_dem.mjs` after base DEM generation:
+	- load `data/tenerife/generated/puerto-city-layers.json`
+	- build a spatial index over road segments
+	- for every DEM sample inside road influence, pull height toward the nearest road centerline height
+	- preserve longitudinal slope while flattening cross-road grade
+	- use per-layer core width, shoulder width, and falloff
+	- write roadbed metrics into DEM runtime and metadata JSON
+- Extend `scripts/geo/build_puerto_city_texture.mjs`:
+	- keep `puerto-city-albedo.png` and `puerto-city-road-mask.png`
+	- write `puerto-city-orm.png` with AO/roughness/metallic data
+	- write `puerto-city-normal.png` as a subtle detail normal map
+	- include road core and shoulder coverage in texture metadata
+- Update `src/scenes/environment/PuertoCityTerrain.tsx`:
+	- load albedo as sRGB
+	- load ORM and normal maps as data textures
+	- keep `metallic = 0`, read roughness from the ORM green channel, and keep road material visual-only
+- Update `scripts/prune-public-assets.mjs` and tests so the new generated runtime textures survive production pruning.
+
+Risks:
+- The current fallback DEM resolution is coarse relative to narrow streets. The first pass uses wider shoulder influence so roadbeds are visible without pretending it is final survey-quality grading.
+- Source DTM replacement remains required before production tuning.
+- Normal and ORM maps add GPU memory. They are 2048 PNGs for this pass and should move to KTX2/WebP only after the project has a texture compression decision.

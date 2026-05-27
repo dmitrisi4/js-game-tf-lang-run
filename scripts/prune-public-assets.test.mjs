@@ -26,6 +26,8 @@ describe('prune-public-assets', () => {
 		expect(shouldPrunePublicAsset('textures/Ground068_4K-JPG/Ground068_4K-JPG_Color.jpg')).toBe(
 			false,
 		);
+		expect(shouldPrunePublicAsset('textures/tenerife/puerto-city-orm.png')).toBe(false);
+		expect(shouldPrunePublicAsset('textures/tenerife/puerto-city-normal.png')).toBe(false);
 	});
 
 	it('prunes source-only model and texture files from build output', () => {

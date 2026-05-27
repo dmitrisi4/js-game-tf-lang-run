@@ -32,9 +32,36 @@
 	},
 	"albedoPath": "public/textures/tenerife/puerto-city-albedo.png",
 	"contactSheetPath": "public/textures/tenerife/puerto-city-contact-sheet.png",
-	"generatedAt": "2026-05-16T14:58:39.761Z",
+	"generatedAt": "2026-05-27T22:16:06.106Z",
+	"materialMaps": {
+		"albedo": {
+			"classification": "color-srgb",
+			"path": "public/textures/tenerife/puerto-city-albedo.png"
+		},
+		"normal": {
+			"classification": "data-linear",
+			"path": "public/textures/tenerife/puerto-city-normal.png",
+			"usage": "subtle terrain and road detail normal map"
+		},
+		"orm": {
+			"channels": {
+				"blue": "metallic; black for terrain and asphalt",
+				"green": "roughness",
+				"red": "ambient occlusion"
+			},
+			"classification": "data-linear",
+			"path": "public/textures/tenerife/puerto-city-orm.png"
+		},
+		"roadMask": {
+			"classification": "data-linear",
+			"path": "public/textures/tenerife/puerto-city-road-mask.png"
+		}
+	},
+	"normalPath": "public/textures/tenerife/puerto-city-normal.png",
+	"ormPath": "public/textures/tenerife/puerto-city-orm.png",
 	"roadMaskPath": "public/textures/tenerife/puerto-city-road-mask.png",
 	"roadMaskChannels": {
+		"alpha": "shoulder and disturbed ground falloff",
 		"blue": "walk paths",
 		"green": "service roads",
 		"red": "main roads"

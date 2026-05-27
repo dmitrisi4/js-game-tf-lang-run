@@ -75,3 +75,16 @@ Gate:
 - Buildings sit beside roads without obvious floating.
 - Build/test/check commands pass or baseline failures are documented.
 - Follow-up streaming tasks are updated with the new data model.
+
+## Phase 7. Roadbed And PBR Material Pipeline
+
+Status: Done
+
+Make the existing baked road layer physically participate in the terrain pass and add PBR control textures for the generated Puerto city terrain.
+
+Gate:
+- DEM generation applies a documented roadbed flattening and shoulder falloff pass from OSM centerlines.
+- Texture generation emits road mask, roughness/ORM, and normal/detail maps with metadata.
+- `PuertoCityTerrain` loads the generated material maps as data textures.
+- The one-command runtime pipeline regenerates the updated terrain GLB and textures.
+- Targeted tests and build/check results are recorded.

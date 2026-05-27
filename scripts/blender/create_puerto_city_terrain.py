@@ -12,6 +12,8 @@ TEXTURE_PATH = ROOT / "public" / "textures" / "tenerife" / "puerto-city-albedo.p
 BLEND_PATH = ROOT / "art" / "blender" / "puerto_de_la_cruz_terrain.blend"
 GLB_PATH = ROOT / "public" / "models" / "environment" / "puerto-de-la-cruz-terrain.glb"
 METADATA_PATH = ROOT / "public" / "data" / "tenerife" / "puerto-city-metadata.json"
+ROADBED_METADATA_PATH = ROOT / "data" / "tenerife" / "generated" / "terrain" / "puerto-roadbed-metadata.json"
+TEXTURE_METADATA_PATH = ROOT / "data" / "tenerife" / "generated" / "textures" / "puerto-city-texture-metadata.json"
 
 BUILDING_FOOTPRINT_SCALE = 1.35
 BUILDING_HEIGHT_SCALE = 1.18
@@ -513,6 +515,9 @@ def update_metadata(dem, terrain, visual_counts):
 	else:
 		metadata = {"version": 1}
 
+	texture_metadata = json.loads(TEXTURE_METADATA_PATH.read_text()) if TEXTURE_METADATA_PATH.exists() else {}
+	roadbed_metadata = json.loads(ROADBED_METADATA_PATH.read_text()) if ROADBED_METADATA_PATH.exists() else {}
+
 	metadata["terrain"] = {
 		"blendPath": str(BLEND_PATH.relative_to(ROOT)),
 		"collisionStrategy": "static mesh terrain for raycasts and environment collision",
@@ -521,11 +526,13 @@ def update_metadata(dem, terrain, visual_counts):
 		"maxHeight": dem["maxHeight"],
 		"minHeight": dem["minHeight"],
 		"rows": dem["rows"],
+		"roadbed": roadbed_metadata.get("roadbed", dem.get("roadbed")),
 		"sourceKind": dem["sourceKind"],
 		"triangleCount": len(terrain.data.polygons) * 2,
 		"vertexCount": len(terrain.data.vertices),
 		"worldBounds": dem["worldBounds"],
 	}
+	metadata["textures"] = texture_metadata.get("materialMaps", {})
 	metadata["visualModel"] = {
 		"buildingFootprintCount": visual_counts["buildings"]["footprintCount"],
 		"coast": visual_counts["coast"],

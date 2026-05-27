@@ -46,7 +46,7 @@
 		"footprintCount": 3318,
 		"runtimeBuildingCount": 1400
 	},
-	"generatedAt": "2026-05-27T11:26:19.505Z",
+	"generatedAt": "2026-05-27T22:15:56.679Z",
 	"roads": {
 		"countsByLayer": {
 			"main": 1372,
@@ -67,6 +67,44 @@
 		"maxHeight": 60.764,
 		"minHeight": 0.39,
 		"rows": 254,
+		"roadbed": {
+			"affectedByLayer": {
+				"main": 7966,
+				"service": 3194,
+				"walk": 2735
+			},
+			"affectedSampleCount": 13895,
+			"enabled": true,
+			"gridSpacingWorldUnits": 6.02,
+			"maxDeltaWorldUnits": 0.275,
+			"segmentCount": 9475,
+			"segmentCountsByLayer": {
+				"main": 4003,
+				"service": 2131,
+				"walk": 3341
+			},
+			"style": {
+				"main": {
+					"coreWidth": 3.4,
+					"roadbedCrown": 0.035,
+					"shoulderWidth": 2.2,
+					"totalInfluenceRadius": 4.936
+				},
+				"service": {
+					"coreWidth": 1.9,
+					"roadbedCrown": 0.025,
+					"shoulderWidth": 1.4,
+					"totalInfluenceRadius": 4.936
+				},
+				"walk": {
+					"coreWidth": 1.25,
+					"roadbedCrown": 0.012,
+					"shoulderWidth": 0.8,
+					"totalInfluenceRadius": 4.936
+				}
+			},
+			"version": 1
+		},
 		"sourceKind": "procedural-fallback-awaiting-cnig-dtm",
 		"triangleCount": 172546,
 		"vertexCount": 86868,
@@ -75,6 +113,71 @@
 			"maxZ": 761.53,
 			"minX": -1025.75,
 			"minZ": -761.53
+		}
+	},
+	"textures": {
+		"albedo": {
+			"classification": "color-srgb",
+			"path": "public/textures/tenerife/puerto-city-albedo.png"
+		},
+		"normal": {
+			"classification": "data-linear",
+			"path": "public/textures/tenerife/puerto-city-normal.png",
+			"usage": "subtle terrain and road detail normal map"
+		},
+		"orm": {
+			"channels": {
+				"blue": "metallic; black for terrain and asphalt",
+				"green": "roughness",
+				"red": "ambient occlusion"
+			},
+			"classification": "data-linear",
+			"path": "public/textures/tenerife/puerto-city-orm.png"
+		},
+		"roadMask": {
+			"classification": "data-linear",
+			"path": "public/textures/tenerife/puerto-city-road-mask.png"
+		}
+	},
+	"visualModel": {
+		"buildingFootprintCount": 3087,
+		"coast": {
+			"hasCoast": true,
+			"hasOcean": true
+		},
+		"landuseOverlayCount": 490,
+		"referenceBasis": [
+			{
+				"focus": "coastline, volcanic foreshore, Lago Martianez, and town setting",
+				"url": "https://tenerifepost.com/puertodelacruz.html"
+			},
+			{
+				"focus": "aerial city massing, coast, Atlantic edge, and colorful dense buildings",
+				"url": "https://www.pexels.com/photo/aerial-view-of-puerto-de-la-cruz-tenerife-coastline-30372578/"
+			},
+			{
+				"focus": "coastal architecture and rugged waterfront composition",
+				"url": "https://www.pexels.com/photo/breathtaking-coastal-view-in-puerto-de-la-cruz-31391838/"
+			},
+			{
+				"focus": "Puerto de la Cruz coast and black volcanic shore references",
+				"url": "https://commons.wikimedia.org/wiki/Category:Coasts_of_Puerto_de_la_Cruz"
+			},
+			{
+				"focus": "Puerto de la Cruz panorama with Teide volcano in the background",
+				"url": "https://sasvata.travel/inspiration/aerial_view_of_puerto_de_la_cruz_with_teide_volcano_in_the_background_tenerife_by_sasvata-travel-jpg/"
+			}
+		],
+		"style": "procedural low-poly city massing from OSM footprints with photo-reference-inspired colors",
+		"visualScale": {
+			"buildingFootprintScale": 1.35,
+			"buildingHeightScale": 1.18,
+			"buildingLocalSpacingScale": 1.06,
+			"buildingSpacingBlockWorldUnits": 72.0
+		},
+		"teide": {
+			"hasOrotavaRidge": true,
+			"hasTeideBackdrop": true
 		}
 	}
 }

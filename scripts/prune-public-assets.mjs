@@ -28,6 +28,8 @@ const RUNTIME_ASSET_ALLOWLIST = new Set([
 	'textures/Ground068_4K-JPG/Ground068_4K-JPG_NormalGL.jpg',
 	'textures/Ground068_4K-JPG/Ground068_4K-JPG_Roughness.jpg',
 	'textures/tenerife/puerto-city-albedo.png',
+	'textures/tenerife/puerto-city-normal.png',
+	'textures/tenerife/puerto-city-orm.png',
 	'textures/tenerife/puerto-city-road-mask.png',
 ]);
 

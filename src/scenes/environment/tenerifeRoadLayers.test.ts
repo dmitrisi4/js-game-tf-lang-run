@@ -2,6 +2,8 @@ import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { describe, expect, it } from 'vitest';
 import tenerifeRoadGeoJsonRaw from '../../../data/tenerife2/export.geojson?raw';
 import {
+	buildRoadJunctionGeometry,
+	buildRoadRibbonGeometry,
 	getTenerifeRoadHeightCacheKey,
 	getTenerifeRoadRenderWidth,
 	getTenerifeRoadVisualPasses,
@@ -92,6 +94,29 @@ describe('tenerife road layers', () => {
 		expect(mainPasses[2].width).toBeLessThan(mainPasses[1].width);
 		expect(servicePasses.map((pass) => pass.nameSuffix)).toEqual(['shoulder', 'surface']);
 		expect(servicePasses[0].width).toBeGreaterThan(servicePasses[1].width);
+	});
+
+	it('builds continuous road ribbon geometry with shared joins', () => {
+		const geometry = buildRoadRibbonGeometry(
+			[
+				{ alongDistance: 0, position: new Vector3(0, 1, 0) },
+				{ alongDistance: 10, position: new Vector3(10, 1, 0) },
+				{ alongDistance: 20, position: new Vector3(10, 1, 10) },
+			],
+			4,
+		);
+
+		expect(geometry.positions).toHaveLength(18);
+		expect(geometry.uvs).toEqual([0, 0, 1, 0, 0, 10, 1, 10, 0, 20, 1, 20]);
+		expect(geometry.indices).toEqual([0, 1, 3, 0, 3, 2, 2, 3, 5, 2, 5, 4]);
+	});
+
+	it('builds round junction pads for shared road nodes', () => {
+		const geometry = buildRoadJunctionGeometry([{ position: new Vector3(4, 2, -8) }], 3, 10, 4);
+
+		expect(geometry.positions).toHaveLength(15);
+		expect(geometry.uvs).toHaveLength(10);
+		expect(geometry.indices).toEqual([10, 11, 12, 10, 12, 13, 10, 13, 14, 10, 14, 11]);
 	});
 
 	it('transforms generated Puerto buildings onto a full-island overlay anchor', () => {

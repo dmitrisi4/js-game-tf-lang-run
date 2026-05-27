@@ -177213,7 +177213,7 @@
 		}
 	],
 	"metadata": {
-		"generatedAt": "2026-05-27T11:26:19.505Z",
+		"generatedAt": "2026-05-27T22:15:56.679Z",
 		"sourceFiles": {
 			"osm": "data/tenerife/puerto_de_la_cruz_osm.json",
 			"roads": "public/data/tenerife/roads-runtime.json"

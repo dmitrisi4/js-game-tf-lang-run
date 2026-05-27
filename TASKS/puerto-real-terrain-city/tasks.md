@@ -115,3 +115,43 @@ Verification notes:
 - Current exported GLB includes 3,087 OSM-derived building footprints, 490 landuse overlays, Atlantic ocean/coast meshes, Teide/Orotava backdrop, and enlarged building visual scale.
 - Browser recheck after disabling the old placeholder buildings was blocked by the tool usage limit. The runtime source change is in `src/scenes/environment/Environment.tsx`.
 - Building visual scale pass added and exported on 2026-05-17: 1.35x footprint scale, 1.18x height scale, and 1.06x local block spacing.
+
+## 7. Roadbed And PBR Material Pipeline
+
+Status: Done
+
+References used:
+- `AGENTS.md`
+- `docs/llm-wiki/index.md`
+- `docs/reference/asset-pipeline.md`
+- `docs/reference/scene-gameplay.md`
+- `docs/reference/physics-collision.md`
+- `docs/reference/runtime-architecture.md`
+- `docs/reference/tech-stack-validation.md`
+- `docs/reference/documentation-maintenance.md`
+- `docs/history/logs/2026-05-27-road-terrain-photoreal-research.md`
+
+Tasks:
+- [x] Record the roadbed/PBR phase in the roadmap and task checklist.
+- [x] Update the technical plan and pipeline docs for roadbed deformation and PBR maps.
+- [x] Add a roadbed deformation pass to `scripts/geo/prepare_puerto_dem.mjs`.
+- [x] Add generated ORM/roughness and normal/detail texture outputs to `scripts/geo/build_puerto_city_texture.mjs`.
+- [x] Update runtime material loading in `PuertoCityTerrain`.
+- [x] Keep new runtime textures in the build asset allowlist and tests.
+- [x] Regenerate city layers, DEM, textures, Blender GLB, and runtime metadata.
+- [x] Add or update focused tests for generated metadata and runtime texture config.
+- [x] Run validation commands and record results.
+- [x] Add a session log for the implementation.
+
+Verification notes:
+- `node --check scripts/geo/prepare_puerto_dem.mjs` passed.
+- `node --check scripts/geo/build_puerto_city_texture.mjs` passed.
+- `python3 -m py_compile scripts/blender/create_puerto_city_terrain.py` passed.
+- `./node_modules/.bin/tsc -p tsconfig.app.json --noEmit` passed.
+- `bun run test -- src/scenes/environment/puertoCityGeneratedData.test.ts src/scenes/environment/puertoCityConfig.test.ts scripts/prune-public-assets.test.mjs` passed: 18 tests.
+- `./node_modules/.bin/biome check ...` passed for changed JS/TS files.
+- `bun run check` passed.
+- `bun run test` passed: 35 files, 163 tests.
+- `bun run build` passed with the existing Vite large chunk warning.
+- Browser smoke at `http://127.0.0.1:5174/?tenerife=1&terrain=real` loaded a canvas and returned HTTP 200 for `puerto-city-albedo.png`, `puerto-city-road-mask.png`, `puerto-city-orm.png`, `puerto-city-normal.png`, and `puerto-de-la-cruz-terrain.glb?v=2026-05-27-roadbed-pbr-pass`.
+- Sandboxed Blender export crashed with a segmentation fault; rerunning `blender -b --python scripts/blender/create_puerto_city_terrain.py` outside sandbox restrictions succeeded.

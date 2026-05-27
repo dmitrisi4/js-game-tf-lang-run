@@ -22,6 +22,18 @@ describe('generated Puerto city data', () => {
 		expect(textureMetadata.roadPixelWidths.walk.clampedPixelWidth).toBeGreaterThanOrEqual(2);
 	});
 
+	it('records generated roadbed and PBR material maps', () => {
+		expect(dem.roadbed.enabled).toBe(true);
+		expect(dem.roadbed.affectedSampleCount).toBeGreaterThan(0);
+		expect(textureMetadata.materialMaps.orm.path).toBe(
+			'public/textures/tenerife/puerto-city-orm.png',
+		);
+		expect(textureMetadata.materialMaps.normal.path).toBe(
+			'public/textures/tenerife/puerto-city-normal.png',
+		);
+		expect(textureMetadata.roadMaskChannels.alpha).toContain('shoulder');
+	});
+
 	it('records terrain mesh budget metadata for the generated GLB', () => {
 		expect(metadata.terrain.glbPath).toBe('public/models/environment/puerto-de-la-cruz-terrain.glb');
 		expect(metadata.terrain.vertexCount).toBeGreaterThan(50_000);

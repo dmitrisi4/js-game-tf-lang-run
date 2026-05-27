@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+	getPuertoLayerPlan,
 	getPuertoRoadRenderMode,
 	getPuertoTerrainMode,
+	PUERTO_CITY_ALBEDO_TEXTURE_URL,
+	PUERTO_CITY_NORMAL_TEXTURE_URL,
+	PUERTO_CITY_ORM_TEXTURE_URL,
+	PUERTO_CITY_ROAD_MASK_TEXTURE_URL,
 	shouldRenderPuertoBuildingsOnFullIsland,
 	shouldRenderRoadMeshes,
 } from './puertoCityConfig';
@@ -47,5 +52,42 @@ describe('puertoCityConfig', () => {
 	it('allows both baked texture and mesh roads for comparison', () => {
 		expect(getPuertoRoadRenderMode('real', '?tenerife=1&terrain=real&roads=both')).toBe('both');
 		expect(shouldRenderRoadMeshes('both')).toBe(true);
+	});
+
+	it('keeps full island Puerto roads and buildings behind the Puerto overlay switch', () => {
+		expect(getPuertoLayerPlan('?tenerife=1&terrain=island-full&puerto=0&buildings=1')).toMatchObject({
+			renderFootprintBuildings: false,
+			renderGeneratedRoadsideBuildings: false,
+			renderManualPreviewBuildings: false,
+			renderPuertoOverlay: false,
+			renderRoadMeshes: false,
+		});
+	});
+
+	it('renders only one Puerto building source for each terrain mode', () => {
+		expect(getPuertoLayerPlan('?tenerife=1')).toMatchObject({
+			renderFootprintBuildings: false,
+			renderGeneratedRoadsideBuildings: false,
+			renderManualPreviewBuildings: true,
+		});
+		expect(getPuertoLayerPlan('?tenerife=1&terrain=real&roads=both')).toMatchObject({
+			renderFootprintBuildings: false,
+			renderGeneratedRoadsideBuildings: false,
+			renderManualPreviewBuildings: false,
+			renderRoadMeshes: true,
+		});
+		expect(getPuertoLayerPlan('?tenerife=1&terrain=island-full&buildings=1')).toMatchObject({
+			renderFootprintBuildings: true,
+			renderGeneratedRoadsideBuildings: false,
+			renderManualPreviewBuildings: false,
+			renderRoadMeshes: true,
+		});
+	});
+
+	it('keeps generated Puerto material map URLs colocated with the terrain atlas', () => {
+		expect(PUERTO_CITY_ALBEDO_TEXTURE_URL).toBe('/textures/tenerife/puerto-city-albedo.png');
+		expect(PUERTO_CITY_ROAD_MASK_TEXTURE_URL).toBe('/textures/tenerife/puerto-city-road-mask.png');
+		expect(PUERTO_CITY_ORM_TEXTURE_URL).toBe('/textures/tenerife/puerto-city-orm.png');
+		expect(PUERTO_CITY_NORMAL_TEXTURE_URL).toBe('/textures/tenerife/puerto-city-normal.png');
 	});
 });

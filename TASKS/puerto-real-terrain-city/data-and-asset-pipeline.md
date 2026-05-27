@@ -38,6 +38,11 @@ Responsibilities:
 - Crop to road bbox plus buffer.
 - Fill nodata holes.
 - Resample to prototype and high-quality grids.
+- Apply the roadbed pass from generated road centerlines:
+	- flatten road cross-section toward the nearest centerline height
+	- preserve longitudinal slope
+	- blend shoulders back into the original DEM with a smooth falloff
+	- record affected sample counts and per-layer style widths
 - Emit:
 	- `data/tenerife/generated/terrain/puerto-dem-runtime.json`
 	- `data/tenerife/generated/terrain/puerto-dem-metadata.json`
@@ -115,8 +120,16 @@ Responsibilities:
 - Emit:
 	- `public/textures/tenerife/puerto-city-albedo.png`
 	- `public/textures/tenerife/puerto-city-road-mask.png`
+	- `public/textures/tenerife/puerto-city-orm.png`
+	- `public/textures/tenerife/puerto-city-normal.png`
 	- `public/textures/tenerife/puerto-city-contact-sheet.png`
 	- `data/tenerife/generated/textures/puerto-city-texture-metadata.json`
+
+Material map conventions:
+- Albedo is sRGB color.
+- Road mask is data: red = main, green = service, blue = walk, alpha = shoulder/disturbed ground coverage.
+- ORM is data: red = ambient occlusion, green = roughness, blue = metallic. Metallic stays black for terrain and asphalt.
+- Normal is data and should stay subtle; gameplay-relevant bumps require explicit terrain height or collider work.
 
 Texture coordinate rule:
 - `u = (worldX - minX) / (maxX - minX)`

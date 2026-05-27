@@ -15,7 +15,12 @@ import type React from 'react';
 import { useEffect, useRef } from 'react';
 import { useScene } from 'react-babylonjs';
 import { applyCollisionFilterToAggregate } from '@/scenes/physics/collisionLayers';
-import { PUERTO_CITY_ALBEDO_TEXTURE_URL, PUERTO_CITY_TERRAIN_MODEL_URL } from './puertoCityConfig';
+import {
+	PUERTO_CITY_ALBEDO_TEXTURE_URL,
+	PUERTO_CITY_NORMAL_TEXTURE_URL,
+	PUERTO_CITY_ORM_TEXTURE_URL,
+	PUERTO_CITY_TERRAIN_MODEL_URL,
+} from './puertoCityConfig';
 
 type PropsType = {
 	havokPlugin: HavokPlugin | null;
@@ -31,6 +36,8 @@ type PropsType = {
 const createPuertoCityTerrainMaterial = (scene: Scene): PBRMaterial => {
 	const material = new PBRMaterial('puerto-city-terrain-runtime-material', scene);
 	const albedoTexture = new Texture(PUERTO_CITY_ALBEDO_TEXTURE_URL, scene);
+	const normalTexture = new Texture(PUERTO_CITY_NORMAL_TEXTURE_URL, scene);
+	const ormTexture = new Texture(PUERTO_CITY_ORM_TEXTURE_URL, scene);
 
 	albedoTexture.name = 'puerto-city-albedo-texture';
 	albedoTexture.gammaSpace = true;
@@ -38,11 +45,29 @@ const createPuertoCityTerrainMaterial = (scene: Scene): PBRMaterial => {
 	albedoTexture.wrapV = Texture.CLAMP_ADDRESSMODE;
 	albedoTexture.anisotropicFilteringLevel = 8;
 
+	normalTexture.name = 'puerto-city-normal-texture';
+	normalTexture.gammaSpace = false;
+	normalTexture.wrapU = Texture.CLAMP_ADDRESSMODE;
+	normalTexture.wrapV = Texture.CLAMP_ADDRESSMODE;
+	normalTexture.anisotropicFilteringLevel = 8;
+	normalTexture.level = 0.45;
+
+	ormTexture.name = 'puerto-city-orm-texture';
+	ormTexture.gammaSpace = false;
+	ormTexture.wrapU = Texture.CLAMP_ADDRESSMODE;
+	ormTexture.wrapV = Texture.CLAMP_ADDRESSMODE;
+	ormTexture.anisotropicFilteringLevel = 8;
+
 	material.albedoColor = Color3.White();
 	material.albedoTexture = albedoTexture;
+	material.bumpTexture = normalTexture;
+	material.metallicTexture = ormTexture;
 	material.metallic = 0;
-	material.roughness = 0.9;
-	material.specularIntensity = 0.14;
+	material.roughness = 0.88;
+	material.useAmbientOcclusionFromMetallicTextureRed = true;
+	material.useRoughnessFromMetallicTextureGreen = true;
+	material.useMetallnessFromMetallicTextureBlue = false;
+	material.specularIntensity = 0.12;
 
 	return material;
 };
