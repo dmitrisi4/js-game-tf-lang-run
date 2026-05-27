@@ -48,7 +48,8 @@ export type TenerifeRoadTransformType = {
 	scale: number;
 };
 
-const ROAD_SURFACE_BIAS = 0.012;
+// Raised significantly to prevent z-fighting flicker against the terrain mesh.
+const ROAD_SURFACE_BIAS = 0.06;
 const ROAD_GROUND_RAY_START_Y = 260;
 const ROAD_GROUND_RAY_LENGTH = 560;
 const ROAD_SHOULDER_COLOR = Color3.FromHexString('#b0a186');
@@ -137,19 +138,19 @@ export const getTenerifeRoadVisualPasses = (
 			{
 				color: ROAD_SHOULDER_COLOR,
 				nameSuffix: 'shoulder',
-				surfaceBias: 0.012,
+				surfaceBias: 0.06,
 				width: width * 1.35,
 			},
 			{
 				color: ROAD_MAIN_SURFACE_COLOR,
 				nameSuffix: 'surface',
-				surfaceBias: 0.022,
+				surfaceBias: 0.1,
 				width,
 			},
 			{
 				color: ROAD_CENTER_LINE_COLOR,
 				nameSuffix: 'centerline',
-				surfaceBias: 0.034,
+				surfaceBias: 0.15,
 				width: Math.max(0.36, width * 0.08),
 			},
 		];
@@ -160,13 +161,13 @@ export const getTenerifeRoadVisualPasses = (
 			{
 				color: ROAD_SHOULDER_COLOR.scale(0.9),
 				nameSuffix: 'shoulder',
-				surfaceBias: 0.012,
+				surfaceBias: 0.06,
 				width: width * 1.22,
 			},
 			{
 				color: ROAD_SERVICE_SURFACE_COLOR,
 				nameSuffix: 'surface',
-				surfaceBias: 0.022,
+				surfaceBias: 0.1,
 				width: width * 0.88,
 			},
 		];
@@ -176,7 +177,7 @@ export const getTenerifeRoadVisualPasses = (
 		{
 			color,
 			nameSuffix: 'surface',
-			surfaceBias: 0.02,
+			surfaceBias: 0.1,
 			width,
 		},
 	];
@@ -252,10 +253,19 @@ const createRoadRibbonMeshWithUv = (
 
 				const nx = (-dz / length) * halfWidth;
 				const nz = (dx / length) * halfWidth;
-				const fromLeft = { x: from.x + nx, z: from.z + nz };
-				const fromRight = { x: from.x - nx, z: from.z - nz };
-				const toRight = { x: to.x - nx, z: to.z - nz };
-				const toLeft = { x: to.x + nx, z: to.z + nz };
+
+				// Extend each segment by halfWidth in both travel directions so that
+				// adjacent quads overlap at bends — this closes the triangular gap
+				// that appears at each segment joint on curved road polylines.
+				const extX = (dx / length) * halfWidth;
+				const extZ = (dz / length) * halfWidth;
+				const fromExt = { x: from.x - extX, z: from.z - extZ };
+				const toExt = { x: to.x + extX, z: to.z + extZ };
+
+				const fromLeft = { x: fromExt.x + nx, z: fromExt.z + nz };
+				const fromRight = { x: fromExt.x - nx, z: fromExt.z - nz };
+				const toRight = { x: toExt.x - nx, z: toExt.z - nz };
+				const toLeft = { x: toExt.x + nx, z: toExt.z + nz };
 				const fromY = getRoadSurfaceHeight(from, scene, groundHeightProvider, surfaceBias, heightCache);
 				const toY = getRoadSurfaceHeight(to, scene, groundHeightProvider, surfaceBias, heightCache);
 
