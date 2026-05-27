@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	getPuertoRoadRenderMode,
 	getPuertoTerrainMode,
+	shouldRenderPuertoBuildingsOnFullIsland,
 	shouldRenderRoadMeshes,
 } from './puertoCityConfig';
 
@@ -24,9 +25,16 @@ describe('puertoCityConfig', () => {
 		expect(shouldRenderRoadMeshes(getPuertoRoadRenderMode('island', '?tenerife=1'))).toBe(true);
 	});
 
-	it('defaults full island Puerto overlay to baked roads to avoid synchronous road ribbon cost', () => {
-		expect(getPuertoRoadRenderMode('island-full', '?tenerife=1&terrain=island-full')).toBe('baked');
-		expect(shouldRenderRoadMeshes(getPuertoRoadRenderMode('island-full'))).toBe(false);
+	it('defaults full island Puerto overlay to visible OSM road meshes', () => {
+		expect(getPuertoRoadRenderMode('island-full', '?tenerife=1&terrain=island-full')).toBe('mesh');
+		expect(shouldRenderRoadMeshes(getPuertoRoadRenderMode('island-full'))).toBe(true);
+	});
+
+	it('keeps full island Puerto buildings opt-in while calibrating roads first', () => {
+		expect(shouldRenderPuertoBuildingsOnFullIsland('?tenerife=1&terrain=island-full')).toBe(false);
+		expect(
+			shouldRenderPuertoBuildingsOnFullIsland('?tenerife=1&terrain=island-full&buildings=1'),
+		).toBe(true);
 	});
 
 	it('defaults baked roads for the real Puerto terrain', () => {

@@ -55,7 +55,7 @@ export const getPuertoRoadRenderMode = (
 	}
 
 	if (terrainMode === 'island-full') {
-		return 'baked';
+		return 'mesh';
 	}
 
 	return 'mesh';
@@ -66,3 +66,15 @@ export const getPuertoRoadRenderMode = (
  */
 export const shouldRenderRoadMeshes = (mode: PuertoRoadRenderMode): boolean =>
 	mode === 'mesh' || mode === 'both';
+
+/**
+ * Resolves whether the full-island Puerto pass should render building volumes.
+ *
+ * Buildings stay opt-in while the road network is being calibrated so the
+ * source OSM streets can be inspected without footprint clutter.
+ */
+export const shouldRenderPuertoBuildingsOnFullIsland = (search?: string): boolean => {
+	const params = getSearchParams(search);
+
+	return params.get('buildings') === '1';
+};
