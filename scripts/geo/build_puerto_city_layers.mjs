@@ -17,7 +17,7 @@ import {
 	writeJson,
 } from './puerto_city_common.mjs';
 
-const MAX_RUNTIME_BUILDINGS = 160;
+const MAX_RUNTIME_BUILDINGS = 1400;
 
 const toWorldPoint = ([lon, lat]) => projectLonLatToWorld(lon, lat);
 
@@ -241,6 +241,13 @@ const main = async () => {
 	const cityVectors = buildFootprints(osmData, nodeIndex, aoi);
 	const attribution = createProjectAttribution();
 	const generatedAt = new Date().toISOString();
+	let existingRuntimeMetadata = {};
+
+	try {
+		existingRuntimeMetadata = await readJson(PATHS.runtimeMetadata);
+	} catch (_error) {
+		existingRuntimeMetadata = {};
+	}
 
 	const cityLayers = {
 		aoi,
@@ -273,8 +280,18 @@ const main = async () => {
 		runtimeBuildings: cityVectors.runtimeBuildings,
 		version: 1,
 	});
+	await writeJson(PATHS.buildingFootprintsRuntime, {
+		attribution,
+		metrics: {
+			runtimeBuildingCount: cityVectors.runtimeBuildings.length,
+			sourceFootprintCount: cityVectors.footprints.length,
+		},
+		runtimeBuildings: cityVectors.runtimeBuildings,
+		version: 1,
+	});
 	await writeJson(PATHS.cityLayers, cityLayers);
 	await writeJson(PATHS.runtimeMetadata, {
+		...existingRuntimeMetadata,
 		aoi,
 		attribution,
 		buildings: {

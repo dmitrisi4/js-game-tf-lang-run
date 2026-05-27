@@ -17,6 +17,7 @@ export const TENERIFE_ROAD_PROJECTION = {
 
 export const PATHS = {
 	buildingFootprints: 'data/tenerife/generated/buildings/puerto-building-footprints.json',
+	buildingFootprintsRuntime: 'public/data/tenerife/puerto-building-footprints-runtime.json',
 	cityAoi: 'data/tenerife/generated/terrain/puerto-city-aoi.json',
 	cityLayers: 'data/tenerife/generated/puerto-city-layers.json',
 	demRuntime: 'data/tenerife/generated/terrain/puerto-dem-runtime.json',
