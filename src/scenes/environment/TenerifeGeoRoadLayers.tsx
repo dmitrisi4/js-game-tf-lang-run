@@ -7,44 +7,178 @@ import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useBeforeRender, useScene } from 'react-babylonjs';
+import { isTenerifeFullIslandTerrainMeshName } from './tenerifeFullIslandConfig';
 import { measureTenerifeSyncStep } from './tenerifePerformance';
-import { isInsideTenerifeCityFootprint, type TenerifeRoadLayerData } from './tenerifeRoadLayers';
+import {
+	isInsideTenerifeCityFootprint,
+	type TenerifeRoadLayerData,
+	type TenerifeRoadLayerId,
+} from './tenerifeRoadLayers';
+import type { WorldPosition } from './worldData';
 
 type PropsType = {
+	groundHeightProvider?: GroundHeightProviderType;
 	roadLayers: TenerifeRoadLayerData[];
 	roadTransform?: TenerifeRoadTransformType;
+	visibleLayerIds?: readonly TenerifeRoadLayerId[];
+};
+
+type GroundHeightProviderType = (position: WorldPosition) => number | null;
+type RoadHeightCacheType = Map<string, number | null>;
+type RoadVisualPassType = {
+	color: Color3;
+	nameSuffix: string;
+	surfaceBias: number;
+	width: number;
 };
 
 export type TenerifeRoadTransformType = {
+	clip?: {
+		maxX?: number;
+		maxZ?: number;
+		minX?: number;
+		minZ?: number;
+	};
 	offset: {
 		x: number;
 		z: number;
 	};
+	roadWidthScaleMultiplier?: number;
 	scale: number;
 };
 
 const ROAD_SURFACE_BIAS = 0.012;
 const ROAD_GROUND_RAY_START_Y = 260;
 const ROAD_GROUND_RAY_LENGTH = 560;
+const ROAD_SHOULDER_COLOR = Color3.FromHexString('#b0a186');
+const ROAD_MAIN_SURFACE_COLOR = Color3.FromHexString('#3f3c36');
+const ROAD_SERVICE_SURFACE_COLOR = Color3.FromHexString('#746a5b');
+const ROAD_CENTER_LINE_COLOR = Color3.FromHexString('#d8c66d');
+
+export const getTenerifeRoadRenderWidth = (
+	width: number,
+	roadTransform?: TenerifeRoadTransformType,
+): number => width * (roadTransform?.scale ?? 1) * (roadTransform?.roadWidthScaleMultiplier ?? 1);
+
+/** Resolves whether a transformed road point is inside the optional runtime clip window. */
+export const isTenerifeRoadPointInsideClip = (
+	position: { x: number; z: number },
+	roadTransform?: TenerifeRoadTransformType,
+): boolean => {
+	const clip = roadTransform?.clip;
+
+	if (!clip) {
+		return true;
+	}
+
+	return (
+		(clip.minX === undefined || position.x >= clip.minX) &&
+		(clip.maxX === undefined || position.x <= clip.maxX) &&
+		(clip.minZ === undefined || position.z >= clip.minZ) &&
+		(clip.maxZ === undefined || position.z <= clip.maxZ)
+	);
+};
+
+/** Returns a stable cache key for repeated terrain samples on transformed road centerline points. */
+export const getTenerifeRoadHeightCacheKey = (position: { x: number; z: number }): string =>
+	`${position.x.toFixed(2)}:${position.z.toFixed(2)}`;
 
 const getRoadSurfaceHeight = (
 	position: { x: number; z: number },
 	scene: NonNullable<ReturnType<typeof useScene>>,
+	groundHeightProvider?: GroundHeightProviderType,
+	surfaceBias = ROAD_SURFACE_BIAS,
+	heightCache?: RoadHeightCacheType,
 ): number | null => {
+	const cacheKey = getTenerifeRoadHeightCacheKey(position);
+	const cachedHeight = heightCache?.get(cacheKey);
+
+	if (cachedHeight !== undefined) {
+		return cachedHeight === null ? null : cachedHeight + surfaceBias;
+	}
+
 	const groundHit = scene.pickWithRay(
 		new Ray(
 			new Vector3(position.x, ROAD_GROUND_RAY_START_Y, position.z),
 			Vector3.DownReadOnly,
 			ROAD_GROUND_RAY_LENGTH,
 		),
-		(mesh) => mesh.name === 'ground1' && mesh.isEnabled() && mesh.isPickable,
+		(mesh) =>
+			mesh.isEnabled() &&
+			mesh.isPickable &&
+			(mesh.name === 'ground1' || isTenerifeFullIslandTerrainMeshName(mesh.name)),
 	);
 
 	if (groundHit?.hit && groundHit.pickedPoint) {
-		return groundHit.pickedPoint.y + ROAD_SURFACE_BIAS;
+		heightCache?.set(cacheKey, groundHit.pickedPoint.y);
+		return groundHit.pickedPoint.y + surfaceBias;
 	}
 
+	const providedHeight = groundHeightProvider?.(position);
+
+	if (providedHeight !== null && typeof providedHeight === 'number') {
+		heightCache?.set(cacheKey, providedHeight);
+		return providedHeight + surfaceBias;
+	}
+
+	heightCache?.set(cacheKey, null);
 	return null;
+};
+
+/** Resolves layered visual passes so OSM centerlines read as road surfaces. */
+export const getTenerifeRoadVisualPasses = (
+	layerId: TenerifeRoadLayerId,
+	width: number,
+	color: Color3,
+): RoadVisualPassType[] => {
+	if (layerId === 'main') {
+		return [
+			{
+				color: ROAD_SHOULDER_COLOR,
+				nameSuffix: 'shoulder',
+				surfaceBias: 0.012,
+				width: width * 1.35,
+			},
+			{
+				color: ROAD_MAIN_SURFACE_COLOR,
+				nameSuffix: 'surface',
+				surfaceBias: 0.022,
+				width,
+			},
+			{
+				color: ROAD_CENTER_LINE_COLOR,
+				nameSuffix: 'centerline',
+				surfaceBias: 0.034,
+				width: Math.max(0.36, width * 0.08),
+			},
+		];
+	}
+
+	if (layerId === 'service') {
+		return [
+			{
+				color: ROAD_SHOULDER_COLOR.scale(0.9),
+				nameSuffix: 'shoulder',
+				surfaceBias: 0.012,
+				width: width * 1.22,
+			},
+			{
+				color: ROAD_SERVICE_SURFACE_COLOR,
+				nameSuffix: 'surface',
+				surfaceBias: 0.022,
+				width: width * 0.88,
+			},
+		];
+	}
+
+	return [
+		{
+			color,
+			nameSuffix: 'surface',
+			surfaceBias: 0.02,
+			width,
+		},
+	];
 };
 
 /** Applies an optional full-island transform to Puerto-local road coordinates. */
@@ -70,9 +204,12 @@ const createRoadRibbonMesh = (
 	color: Color3,
 	scene: NonNullable<ReturnType<typeof useScene>>,
 	roadTransform?: TenerifeRoadTransformType,
-): Mesh => {
+	groundHeightProvider?: GroundHeightProviderType,
+	surfaceBias = ROAD_SURFACE_BIAS,
+	heightCache?: RoadHeightCacheType,
+): Mesh | null => {
 	return measureTenerifeSyncStep(`Road mesh creation: ${name}`, () => {
-		const renderWidth = width * (roadTransform?.scale ?? 1);
+		const renderWidth = getTenerifeRoadRenderWidth(width, roadTransform);
 		const halfWidth = renderWidth / 2;
 		const positions: number[] = [];
 		const indices: number[] = [];
@@ -90,7 +227,12 @@ const createRoadRibbonMesh = (
 					z: (from.z + to.z) / 2,
 				};
 
-				if (length <= 0.01 || (!roadTransform && !isInsideTenerifeCityFootprint(segmentMidpoint))) {
+				if (
+					length <= 0.01 ||
+					(!roadTransform && !isInsideTenerifeCityFootprint(segmentMidpoint)) ||
+					!isTenerifeRoadPointInsideClip(from, roadTransform) ||
+					!isTenerifeRoadPointInsideClip(to, roadTransform)
+				) {
 					continue;
 				}
 
@@ -100,27 +242,25 @@ const createRoadRibbonMesh = (
 				const fromRight = { x: from.x - nx, z: from.z - nz };
 				const toRight = { x: to.x - nx, z: to.z - nz };
 				const toLeft = { x: to.x + nx, z: to.z + nz };
-				const fromLeftY = getRoadSurfaceHeight(fromLeft, scene);
-				const fromRightY = getRoadSurfaceHeight(fromRight, scene);
-				const toRightY = getRoadSurfaceHeight(toRight, scene);
-				const toLeftY = getRoadSurfaceHeight(toLeft, scene);
+				const fromY = getRoadSurfaceHeight(from, scene, groundHeightProvider, surfaceBias, heightCache);
+				const toY = getRoadSurfaceHeight(to, scene, groundHeightProvider, surfaceBias, heightCache);
 
-				if (fromLeftY === null || fromRightY === null || toRightY === null || toLeftY === null) {
+				if (fromY === null || toY === null) {
 					continue;
 				}
 
 				positions.push(
 					fromLeft.x,
-					fromLeftY,
+					fromY,
 					fromLeft.z,
 					fromRight.x,
-					fromRightY,
+					fromY,
 					fromRight.z,
 					toRight.x,
-					toRightY,
+					toY,
 					toRight.z,
 					toLeft.x,
-					toLeftY,
+					toY,
 					toLeft.z,
 				);
 
@@ -134,6 +274,10 @@ const createRoadRibbonMesh = (
 				);
 				vertexIndex += 4;
 			}
+		}
+
+		if (positions.length === 0) {
+			return null;
 		}
 
 		const normals: number[] = [];
@@ -154,7 +298,6 @@ const createRoadRibbonMesh = (
 		material.freeze();
 		mesh.material = material;
 		mesh.isPickable = false;
-		mesh.alwaysSelectAsActiveMesh = true;
 		mesh.doNotSyncBoundingInfo = true;
 		mesh.freezeWorldMatrix();
 
@@ -168,18 +311,31 @@ const createRoadRibbonMesh = (
  * The source is split into three visual layers so gameplay can tune road,
  * walking, and service readability independently.
  */
-const TenerifeGeoRoadLayers: React.FC<PropsType> = ({ roadLayers, roadTransform }) => {
+const TenerifeGeoRoadLayers: React.FC<PropsType> = ({
+	groundHeightProvider,
+	roadLayers,
+	roadTransform,
+	visibleLayerIds,
+}) => {
 	const scene = useScene();
 	const [isGroundMeshReady, setIsGroundMeshReady] = useState(false);
-	const stableRoadLayers = useMemo(() => roadLayers, [roadLayers]);
+	const stableRoadLayers = useMemo(
+		() =>
+			visibleLayerIds ? roadLayers.filter((layer) => visibleLayerIds.includes(layer.id)) : roadLayers,
+		[roadLayers, visibleLayerIds],
+	);
 
 	useBeforeRender(() => {
 		if (!scene || isGroundMeshReady) {
 			return;
 		}
 
-		const groundMesh = scene.getMeshByName('ground1');
+		if (groundHeightProvider && roadTransform) {
+			setIsGroundMeshReady(true);
+			return;
+		}
 
+		const groundMesh = scene.getMeshByName('ground1');
 		if (groundMesh?.isEnabled() && groundMesh.isPickable) {
 			setIsGroundMeshReady(true);
 		}
@@ -190,17 +346,25 @@ const TenerifeGeoRoadLayers: React.FC<PropsType> = ({ roadLayers, roadTransform 
 			return undefined;
 		}
 
+		const heightCache: RoadHeightCacheType = new Map();
 		const meshes = stableRoadLayers
 			.filter((layer) => layer.lines.length > 0)
-			.map((layer) =>
-				createRoadRibbonMesh(
-					`tenerife-geo-roads-${layer.id}`,
-					layer.lines,
-					layer.width,
-					layer.color,
-					scene,
-					roadTransform,
-				),
+			.flatMap((layer) =>
+				getTenerifeRoadVisualPasses(layer.id, layer.width, layer.color).flatMap((pass) => {
+					const mesh = createRoadRibbonMesh(
+						`tenerife-geo-roads-${layer.id}-${pass.nameSuffix}`,
+						layer.lines,
+						pass.width,
+						pass.color,
+						scene,
+						roadTransform,
+						groundHeightProvider,
+						pass.surfaceBias,
+						heightCache,
+					);
+
+					return mesh ? [mesh] : [];
+				}),
 			);
 
 		return () => {
@@ -208,7 +372,7 @@ const TenerifeGeoRoadLayers: React.FC<PropsType> = ({ roadLayers, roadTransform 
 				mesh.dispose();
 			}
 		};
-	}, [isGroundMeshReady, roadTransform, stableRoadLayers, scene]);
+	}, [groundHeightProvider, isGroundMeshReady, roadTransform, stableRoadLayers, scene]);
 
 	return null;
 };

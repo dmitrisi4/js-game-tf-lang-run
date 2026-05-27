@@ -1,8 +1,8 @@
 import { Effect } from '@babylonjs/core/Materials/effect';
-import { Texture } from '@babylonjs/core/Materials/Textures/texture';
 import { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial';
-import type { Scene } from '@babylonjs/core/scene';
+import { Texture } from '@babylonjs/core/Materials/Textures/texture';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
+import type { Scene } from '@babylonjs/core/scene';
 
 const SHADER_NAME = 'tenerifeTerrainSplat';
 
@@ -192,15 +192,27 @@ export const createTenerifeTerrainShaderMaterial = (scene: Scene): ShaderMateria
 		{
 			attributes: ['position', 'normal', 'uv'],
 			uniforms: [
-				'worldViewProjection', 'world',
-				'uColorBeach', 'uColorRock', 'uColorGrass', 'uColorVolc'
+				'worldViewProjection',
+				'world',
+				'uColorBeach',
+				'uColorRock',
+				'uColorGrass',
+				'uColorVolc',
 			],
 			samplers: [
 				'uAoMap',
-				'uAlbedoBeach', 'uNormalBeach', 'uRoughnessBeach',
-				'uAlbedoRock', 'uNormalRock', 'uRoughnessRock',
-				'uAlbedoGrass', 'uNormalGrass', 'uRoughnessGrass',
-				'uAlbedoVolc', 'uNormalVolc', 'uRoughnessVolc'
+				'uAlbedoBeach',
+				'uNormalBeach',
+				'uRoughnessBeach',
+				'uAlbedoRock',
+				'uNormalRock',
+				'uRoughnessRock',
+				'uAlbedoGrass',
+				'uNormalGrass',
+				'uRoughnessGrass',
+				'uAlbedoVolc',
+				'uNormalVolc',
+				'uRoughnessVolc',
 			],
 			needAlphaBlending: false,
 			needAlphaTesting: false,
