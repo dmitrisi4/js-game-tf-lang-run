@@ -11,6 +11,8 @@ When the player opens `?tenerife=1&terrain=island-full`, Puerto de la Cruz shoul
 - Puerto overlay is centered on the calibrated full-island Puerto marker.
 - Puerto overlay uses a scale derived from full-island geospatial control points instead of a visual-only guess.
 - Existing `?tenerife=1&terrain=real&roads=both` behavior remains available.
+- Full-island mode renders Puerto buildings from OSM-derived building footprint data, not only procedural roadside filler.
+- Building placement uses the same Puerto-to-full-island transform as the road layer so streets and houses stay spatially coherent.
 
 ## Non-Goals
 

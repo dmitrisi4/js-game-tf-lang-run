@@ -18,3 +18,13 @@
 - Run build validation.
 - Browser-check `?tenerife=1&terrain=island-full`.
 - Add session log notes.
+## Phase 4: Real Footprint City Layer
+
+Status: In progress
+
+Goal: replace the current full-island visual city placeholder with a lightweight runtime layer generated from Puerto de la Cruz OSM building footprints.
+
+Phase gate:
+- `?tenerife=1&terrain=island-full` shows Puerto roads and OSM-derived building volumes by default.
+- The building layer can be disabled with the existing `puerto=0` opt-out.
+- Targeted tests cover the runtime data conversion and island-full defaults.

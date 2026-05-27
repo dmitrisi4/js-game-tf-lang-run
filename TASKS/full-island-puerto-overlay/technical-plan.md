@@ -31,6 +31,15 @@
 - Reuse `TenerifeGeoRoadLayers` with optional `positionOffset` and `scale`.
 - Default `island-full` road mode to `both`, so mesh roads render with the city overlay.
 
+## Phase 4 Implementation
+
+- Generate `public/data/tenerife/puerto-building-footprints-runtime.json` from `data/tenerife/generated/buildings/puerto-building-footprints.json`.
+- Keep only compact runtime placement fields: id, local position, yaw, footprint bounds, height, area, and source footprint count.
+- Add a dedicated Babylon thin-instance building layer for full-island Puerto buildings instead of rendering thousands of React boxes.
+- Transform footprint positions with the existing Puerto road overlay transform.
+- Ground each footprint box through `getTenerifeFullIslandHeightAtPosition`.
+- Keep primitive visual volumes and no per-building physics for this pass.
+
 ## Risks
 
 - Full-island and Puerto vertical terrain may z-fight near the overlay. First pass keeps a small positive height lift.
