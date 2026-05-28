@@ -18,6 +18,7 @@ import {
 	TENERIFE_FULL_ISLAND_WATER_SURFACE_Y,
 } from '@/scenes/environment/tenerifeFullIslandConfig';
 import { getTenerifeFullIslandHeightAtPosition } from '@/scenes/environment/tenerifeFullIslandHeightfield';
+import { isTenerifeRoadVisualSupportMeshName } from '@/scenes/environment/tenerifeRoadMeshNames';
 import { resolvePlayerAnimationState, selectPlayerAnimationGroup } from './playerAnimationRegistry';
 import { isRoofParkourBuildingMeshName } from './roofParkourController';
 import { getPlayerWaterState } from './waterInteraction';
@@ -50,6 +51,7 @@ const PLAYER_VISUAL_GROUND_MESH_NAMES = new Set(['ground1', 'tenerife-seabed']);
 const isPlayerVisualGroundMeshName = (name: string): boolean =>
 	PLAYER_VISUAL_GROUND_MESH_NAMES.has(name) ||
 	isTenerifeFullIslandTerrainMeshName(name) ||
+	isTenerifeRoadVisualSupportMeshName(name) ||
 	isRoofParkourBuildingMeshName(name);
 
 const getVisualSearch = (): string | undefined =>
