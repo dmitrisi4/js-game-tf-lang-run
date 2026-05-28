@@ -198,3 +198,34 @@ Risks:
 - The current fallback DEM resolution is coarse relative to narrow streets. The first pass uses wider shoulder influence so roadbeds are visible without pretending it is final survey-quality grading.
 - Source DTM replacement remains required before production tuning.
 - Normal and ORM maps add GPU memory. They are 2048 PNGs for this pass and should move to KTX2/WebP only after the project has a texture compression decision.
+
+## Phase 8 Road Overlay Grounding Polish
+
+References used:
+- `AGENTS.md`
+- `docs/llm-wiki/index.md`
+- `docs/llm-wiki/scene-architecture.md`
+- `docs/llm-wiki/world-building.md`
+- `docs/reference/scene-gameplay.md`
+- `docs/reference/physics-collision.md`
+- `docs/reference/runtime-architecture.md`
+- `docs/reference/tech-stack-validation.md`
+
+Goal:
+- Make optional road mesh overlays read as terrain-attached surfaces, while the default real Puerto terrain mode remains baked-texture first.
+- Stop the player model's feet from appearing below visible road overlays.
+
+Implementation:
+- Update `src/scenes/environment/TenerifeGeoRoadLayers.tsx`:
+	- keep road mesh names under a stable `tenerife-geo-roads-` prefix
+	- sample each rendered ribbon edge against the terrain height provider/raycast path
+	- use a smaller geometric lift and material depth offset instead of visibly floating the road mesh
+	- mark road overlays pickable for visual grounding only, not physics
+- Update `src/scenes/player/AssetPlayerVisual.tsx`:
+	- accept Tenerife road overlay meshes as visual ground candidates
+	- keep player locomotion and physics grounding unchanged
+- Add focused tests for road overlay mesh name detection and road geometry edge height behavior.
+
+Risks:
+- Pickable road meshes can add raycast candidates, so only player visual grounding should opt into them by name.
+- Lower road lift may reveal z-fighting on some slopes; material depth offset should carry the rendering bias without widening the physical/visual gap.

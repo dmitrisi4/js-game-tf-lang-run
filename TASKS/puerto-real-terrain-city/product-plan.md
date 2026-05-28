@@ -13,6 +13,7 @@ The Tenerife preview should show Puerto de la Cruz as a grounded hillside coasta
 - Generated assets include source/license notes for DEM, OSM roads/buildings, textures, and any derived masks.
 - Terrain mesh, texture atlas, and optional road geometry have documented budgets.
 - Browser verification confirms roads and buildings no longer look like they float above or cut through the city surface.
+- Optional road mesh overlays conform tightly enough to the terrain that the player model's feet do not appear below the visible road surface.
 
 ## Non-Goals
 

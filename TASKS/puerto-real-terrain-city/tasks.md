@@ -155,3 +155,38 @@ Verification notes:
 - `bun run build` passed with the existing Vite large chunk warning.
 - Browser smoke at `http://127.0.0.1:5174/?tenerife=1&terrain=real` loaded a canvas and returned HTTP 200 for `puerto-city-albedo.png`, `puerto-city-road-mask.png`, `puerto-city-orm.png`, `puerto-city-normal.png`, and `puerto-de-la-cruz-terrain.glb?v=2026-05-27-roadbed-pbr-pass`.
 - Sandboxed Blender export crashed with a segmentation fault; rerunning `blender -b --python scripts/blender/create_puerto_city_terrain.py` outside sandbox restrictions succeeded.
+
+## 8. Road Overlay Grounding Polish
+
+Status: Implemented
+
+References used:
+- `AGENTS.md`
+- `docs/llm-wiki/index.md`
+- `docs/llm-wiki/scene-architecture.md`
+- `docs/llm-wiki/world-building.md`
+- `docs/reference/scene-gameplay.md`
+- `docs/reference/physics-collision.md`
+- `docs/reference/runtime-architecture.md`
+- `docs/reference/tech-stack-validation.md`
+
+Tasks:
+- [x] Identify why player feet can appear below visible road mesh overlays.
+- [x] Make road overlay mesh naming and visual-ground intent explicit.
+- [x] Sample road ribbon edge heights against the active terrain instead of using centerline-only height.
+- [x] Let player visual grounding ray recognize road overlay meshes without changing physics authority.
+- [x] Add focused tests for road overlay helper behavior.
+- [x] Remove decorative yellow centerline road stripes from mesh road overlays.
+- [x] Run targeted validation and HTTP smoke checks.
+- [x] Add a session log for the implementation.
+
+Verification notes:
+- `bun run test -- src/scenes/environment/tenerifeRoadLayers.test.ts src/scenes/environment/tenerifeRoadMeshNames.test.ts src/scenes/player/Player.test.ts` passed: 3 files, 15 tests.
+- `./node_modules/.bin/tsc -p tsconfig.app.json --noEmit` passed.
+- `./node_modules/.bin/biome check src/scenes/environment/TenerifeGeoRoadLayers.tsx src/scenes/environment/tenerifeRoadLayers.test.ts src/scenes/environment/tenerifeRoadMeshNames.ts src/scenes/environment/tenerifeRoadMeshNames.test.ts src/scenes/player/AssetPlayerVisual.tsx` passed.
+- `bun run check` passed.
+- `bun run test` passed: 36 files, 166 tests.
+- `bun run build` passed with the existing Vite large chunk warning.
+- Dev server started at `http://127.0.0.1:5175/` after `5174` was already in use.
+- HTTP smoke for `/?tenerife=1&terrain=real&roads=both`, `puerto-de-la-cruz-terrain.glb`, `puerto-city-albedo.png`, `puerto-city-normal.png`, `puerto-city-orm.png`, and `roads-runtime.json` returned `200 OK`.
+- Blocked - visual browser smoke: Browser/DevTools backend was unavailable because the Chrome DevTools MCP profile was already running, and Playwright is not installed in this project.

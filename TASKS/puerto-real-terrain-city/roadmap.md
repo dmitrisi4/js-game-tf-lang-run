@@ -88,3 +88,15 @@ Gate:
 - `PuertoCityTerrain` loads the generated material maps as data textures.
 - The one-command runtime pipeline regenerates the updated terrain GLB and textures.
 - Targeted tests and build/check results are recorded.
+
+## Phase 8. Road Overlay Grounding Polish
+
+Status: Implemented
+
+Reduce the remaining "pasted on" road look in mesh-overlay modes and keep the player visual foot anchor aligned with the visible road surface.
+
+Gate:
+- Road ribbons sample terrain at their rendered edges instead of using only centerline height.
+- Runtime road overlays stay visual-only for physics, but can be recognized by the player visual grounding ray.
+- `terrain=real` keeps baked roads as the default, with mesh roads reserved for explicit comparison/debug modes.
+- Focused tests cover road mesh naming, pickability intent, and road surface helper behavior.

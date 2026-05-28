@@ -90,6 +90,7 @@ Report exact failures and distinguish project baseline issues from issues introd
 
 ## Session Logging
 Every meaningful architecture or implementation session must be logged in `docs/history/logs/`.
+**CRITICAL**: Every time before making a git commit, you MUST write or update a daily worklog in `docs/history/logs/<YYYY-MM-DD>.md` summarizing the work done.
 
 When architecture changes materially, update `AGENTS.md`, `docs/implementation_plan.md`, and directly affected workflow docs.
 
