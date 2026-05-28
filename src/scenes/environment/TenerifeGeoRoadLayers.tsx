@@ -15,6 +15,10 @@ import {
 	type TenerifeRoadLayerData,
 	type TenerifeRoadLayerId,
 } from './tenerifeRoadLayers';
+import {
+	getTenerifeRoadOverlayMeshName,
+	isTenerifeRoadVisualSupportMeshName,
+} from './tenerifeRoadMeshNames';
 import type { WorldPosition } from './worldData';
 
 type PropsType = {
@@ -42,6 +46,10 @@ type RoadRibbonGeometryType = {
 	positions: number[];
 	uvs: number[];
 };
+type RoadSurfaceHeightResolverType = (
+	position: { x: number; z: number },
+	fallbackY: number,
+) => number;
 export type RoadJunctionPointType = {
 	position: Vector3;
 };
@@ -61,14 +69,15 @@ export type TenerifeRoadTransformType = {
 	scale: number;
 };
 
-// Raised significantly to prevent z-fighting flicker against the terrain mesh.
-const ROAD_SURFACE_BIAS = 0.06;
+const ROAD_SURFACE_BIAS = 0.018;
+const ROAD_SHOULDER_SURFACE_BIAS = 0.012;
+const ROAD_MATERIAL_Z_OFFSET = -1;
+const ROAD_MATERIAL_Z_OFFSET_UNITS = -2;
 const ROAD_GROUND_RAY_START_Y = 260;
 const ROAD_GROUND_RAY_LENGTH = 560;
 const ROAD_SHOULDER_COLOR = Color3.FromHexString('#b0a186');
 const ROAD_MAIN_SURFACE_COLOR = Color3.FromHexString('#3f3c36');
 const ROAD_SERVICE_SURFACE_COLOR = Color3.FromHexString('#746a5b');
-const ROAD_CENTER_LINE_COLOR = Color3.FromHexString('#d8c66d');
 const ROAD_JUNCTION_SEGMENTS = 14;
 
 export const getTenerifeRoadRenderWidth = (
@@ -153,22 +162,15 @@ export const getTenerifeRoadVisualPasses = (
 				color: ROAD_SHOULDER_COLOR,
 				hasJunctionPads: true,
 				nameSuffix: 'shoulder',
-				surfaceBias: 0.06,
+				surfaceBias: ROAD_SHOULDER_SURFACE_BIAS,
 				width: width * 1.35,
 			},
 			{
 				color: ROAD_MAIN_SURFACE_COLOR,
 				hasJunctionPads: true,
 				nameSuffix: 'surface',
-				surfaceBias: 0.1,
+				surfaceBias: ROAD_SURFACE_BIAS,
 				width,
-			},
-			{
-				color: ROAD_CENTER_LINE_COLOR,
-				hasJunctionPads: false,
-				nameSuffix: 'centerline',
-				surfaceBias: 0.15,
-				width: Math.max(0.36, width * 0.08),
 			},
 		];
 	}
@@ -179,14 +181,14 @@ export const getTenerifeRoadVisualPasses = (
 				color: ROAD_SHOULDER_COLOR.scale(0.9),
 				hasJunctionPads: true,
 				nameSuffix: 'shoulder',
-				surfaceBias: 0.06,
+				surfaceBias: ROAD_SHOULDER_SURFACE_BIAS,
 				width: width * 1.22,
 			},
 			{
 				color: ROAD_SERVICE_SURFACE_COLOR,
 				hasJunctionPads: true,
 				nameSuffix: 'surface',
-				surfaceBias: 0.1,
+				surfaceBias: ROAD_SURFACE_BIAS,
 				width: width * 0.88,
 			},
 		];
@@ -197,7 +199,7 @@ export const getTenerifeRoadVisualPasses = (
 			color,
 			hasJunctionPads: true,
 			nameSuffix: 'surface',
-			surfaceBias: 0.1,
+			surfaceBias: ROAD_SURFACE_BIAS,
 			width,
 		},
 	];
@@ -279,6 +281,7 @@ export const buildRoadRibbonGeometry = (
 	points: RoadRibbonPointType[],
 	width: number,
 	startVertexIndex = 0,
+	heightResolver?: RoadSurfaceHeightResolverType,
 ): RoadRibbonGeometryType => {
 	const halfWidth = width / 2;
 	const positions: number[] = [];
@@ -296,8 +299,10 @@ export const buildRoadRibbonGeometry = (
 			x: point.position.x - normal.x * halfWidth,
 			z: point.position.z - normal.z * halfWidth,
 		};
+		const leftY = heightResolver?.(left, point.position.y) ?? point.position.y;
+		const rightY = heightResolver?.(right, point.position.y) ?? point.position.y;
 
-		positions.push(left.x, point.position.y, left.z, right.x, point.position.y, right.z);
+		positions.push(left.x, leftY, left.z, right.x, rightY, right.z);
 		uvs.push(0, point.alongDistance, 1, point.alongDistance);
 
 		if (index < points.length - 1) {
@@ -324,6 +329,7 @@ export const buildRoadJunctionGeometry = (
 	radius: number,
 	startVertexIndex = 0,
 	segments = ROAD_JUNCTION_SEGMENTS,
+	heightResolver?: RoadSurfaceHeightResolverType,
 ): RoadRibbonGeometryType => {
 	const positions: number[] = [];
 	const indices: number[] = [];
@@ -338,8 +344,9 @@ export const buildRoadJunctionGeometry = (
 			const angle = (segmentIndex / segments) * Math.PI * 2;
 			const x = point.position.x + Math.cos(angle) * radius;
 			const z = point.position.z + Math.sin(angle) * radius;
+			const y = heightResolver?.({ x, z }, point.position.y) ?? point.position.y;
 
-			positions.push(x, point.position.y, z);
+			positions.push(x, y, z);
 			uvs.push(0.5 + Math.cos(angle) * 0.5, 0.5 + Math.sin(angle) * 0.5);
 		}
 
@@ -410,6 +417,9 @@ const createRoadRibbonMeshWithUv = (
 		const indices: number[] = [];
 		const uvs: number[] = [];
 		let vertexIndex = 0;
+		const resolveOverlayHeight: RoadSurfaceHeightResolverType = (position, fallbackY) =>
+			getRoadSurfaceHeight(position, scene, groundHeightProvider, surfaceBias, heightCache) ??
+			fallbackY;
 
 		for (const line of lines) {
 			let currentRibbon: RoadRibbonPointType[] = [];
@@ -422,7 +432,12 @@ const createRoadRibbonMeshWithUv = (
 					return;
 				}
 
-				const geometry = buildRoadRibbonGeometry(currentRibbon, renderWidth, vertexIndex);
+				const geometry = buildRoadRibbonGeometry(
+					currentRibbon,
+					renderWidth,
+					vertexIndex,
+					resolveOverlayHeight,
+				);
 				positions.push(...geometry.positions);
 				uvs.push(...geometry.uvs);
 				indices.push(...geometry.indices);
@@ -500,7 +515,13 @@ const createRoadRibbonMeshWithUv = (
 			}
 
 			if (junctionPoints.length > 0) {
-				const geometry = buildRoadJunctionGeometry(junctionPoints, renderWidth * 0.58, vertexIndex);
+				const geometry = buildRoadJunctionGeometry(
+					junctionPoints,
+					renderWidth * 0.58,
+					vertexIndex,
+					ROAD_JUNCTION_SEGMENTS,
+					resolveOverlayHeight,
+				);
 				positions.push(...geometry.positions);
 				uvs.push(...geometry.uvs);
 				indices.push(...geometry.indices);
@@ -524,36 +545,31 @@ const createRoadRibbonMeshWithUv = (
 		vertexData.applyToMesh(mesh);
 
 		// Use procedural surface shader for surface passes; plain material for
-		// shoulder and centerline passes that are purely decorative color strips.
+		// shoulder passes that are purely decorative color strips.
 		const isSurfacePass = name.endsWith('-surface');
 		if (isSurfacePass) {
 			const surfaceType = getRoadSurfaceType(layerId, isInsideCity);
 			const material = createRoadSurfaceMaterial(name, surfaceType, scene);
+			material.zOffset = ROAD_MATERIAL_Z_OFFSET;
+			material.zOffsetUnits = ROAD_MATERIAL_Z_OFFSET_UNITS;
 			mesh.material = material;
 		} else {
-			// Shoulder and centerline keep simple emissive colors for contrast
+			// Shoulders keep simple emissive colors for contrast.
 			const material = new StandardMaterial(`${name}-material`, scene);
 			material.backFaceCulling = false;
 
-			// Shoulders: earthy warm sand, centerline: removed for dirt roads
-			if (name.endsWith('-shoulder')) {
-				material.diffuseColor = isInsideCity
-					? Color3.FromHexString('#968672')
-					: Color3.FromHexString('#7a6a4a');
-				material.emissiveColor = material.diffuseColor.scale(0.12);
-			} else {
-				// centerline: only visible in city cobblestone context
-				material.diffuseColor = isInsideCity
-					? Color3.FromHexString('#c8b05a')
-					: Color3.FromHexString('#7a6a4a');
-				material.emissiveColor = material.diffuseColor.scale(0.1);
-			}
+			material.diffuseColor = isInsideCity
+				? Color3.FromHexString('#968672')
+				: Color3.FromHexString('#7a6a4a');
+			material.emissiveColor = material.diffuseColor.scale(0.12);
 			material.specularColor = Color3.FromHexString('#15120f');
+			material.zOffset = ROAD_MATERIAL_Z_OFFSET;
+			material.zOffsetUnits = ROAD_MATERIAL_Z_OFFSET_UNITS;
 			material.freeze();
 			mesh.material = material;
 		}
 
-		mesh.isPickable = false;
+		mesh.isPickable = isTenerifeRoadVisualSupportMeshName(name);
 		mesh.doNotSyncBoundingInfo = true;
 		mesh.freezeWorldMatrix();
 
@@ -623,9 +639,10 @@ const TenerifeGeoRoadLayers: React.FC<PropsType> = ({
 					const isInsideCity = roadTransform
 						? true // transformed layers are always city context
 						: isInsideTenerifeCityFootprint(segMid);
+					const meshName = getTenerifeRoadOverlayMeshName(layer.id, pass.nameSuffix);
 
 					const mesh = createRoadRibbonMeshWithUv(
-						`tenerife-geo-roads-${layer.id}-${pass.nameSuffix}`,
+						meshName,
 						layer.lines,
 						pass.width,
 						layer.id,

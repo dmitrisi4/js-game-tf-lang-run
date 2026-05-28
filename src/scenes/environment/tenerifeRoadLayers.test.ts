@@ -89,9 +89,8 @@ describe('tenerife road layers', () => {
 			TENERIFE_ROAD_LAYER_STYLES.service.color,
 		);
 
-		expect(mainPasses.map((pass) => pass.nameSuffix)).toEqual(['shoulder', 'surface', 'centerline']);
+		expect(mainPasses.map((pass) => pass.nameSuffix)).toEqual(['shoulder', 'surface']);
 		expect(mainPasses[0].width).toBeGreaterThan(mainPasses[1].width);
-		expect(mainPasses[2].width).toBeLessThan(mainPasses[1].width);
 		expect(servicePasses.map((pass) => pass.nameSuffix)).toEqual(['shoulder', 'surface']);
 		expect(servicePasses[0].width).toBeGreaterThan(servicePasses[1].width);
 	});
@@ -109,6 +108,21 @@ describe('tenerife road layers', () => {
 		expect(geometry.positions).toHaveLength(18);
 		expect(geometry.uvs).toEqual([0, 0, 1, 0, 0, 10, 1, 10, 0, 20, 1, 20]);
 		expect(geometry.indices).toEqual([0, 1, 3, 0, 3, 2, 2, 3, 5, 2, 5, 4]);
+	});
+
+	it('samples road ribbon edge heights independently from the centerline', () => {
+		const geometry = buildRoadRibbonGeometry(
+			[
+				{ alongDistance: 0, position: new Vector3(0, 1, 0) },
+				{ alongDistance: 10, position: new Vector3(10, 1, 0) },
+			],
+			4,
+			0,
+			(position, fallbackY) => fallbackY + position.z * 0.1,
+		);
+
+		expect(geometry.positions.slice(0, 6)).toEqual([0, 1.2, 2, 0, 0.8, -2]);
+		expect(geometry.positions.slice(6, 12)).toEqual([10, 1.2, 2, 10, 0.8, -2]);
 	});
 
 	it('builds round junction pads for shared road nodes', () => {
