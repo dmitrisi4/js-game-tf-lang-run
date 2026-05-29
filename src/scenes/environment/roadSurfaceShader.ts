@@ -11,6 +11,7 @@ import type { TenerifeRoadLayerId } from './tenerifeRoadLayers';
  * - earth: packed soil for walk paths and service tracks
  */
 export type RoadSurfaceType = 'cobblestone' | 'dirt' | 'earth';
+export type RoadSurfaceMaterialRole = 'surface' | 'terrainBlend';
 
 /**
  * Maps road layer + city context to a surface type.
@@ -30,6 +31,12 @@ export const getRoadSurfaceType = (
 
 	return 'dirt';
 };
+
+/**
+ * Resolves how a road visual pass should shade its pixels.
+ */
+export const getRoadSurfaceMaterialRole = (nameSuffix: string): RoadSurfaceMaterialRole =>
+	nameSuffix === 'shoulder' ? 'terrainBlend' : 'surface';
 
 const SHADER_NAME = 'roadSurface';
 
@@ -59,9 +66,10 @@ void main(void) {
 `;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Fragment shader — fully opaque, procedural road surface.
-// Key fix: NO alpha blending — opaque roads avoid seam artefacts between quads.
-// Edge transition = colour mix to shoulder colour, not transparency.
+// Fragment shader — procedural road surface.
+// Road cores stay opaque to avoid seam artifacts between quads. Terrain-blend
+// shoulder passes fade only at the outer edge so the base terrain can show
+// through instead of ending at a hard rectangular strip.
 //
 // Surface modes:
 //   0 = cobblestone: Voronoi grid, ~25 cm stones (scale = world * 4)
@@ -72,8 +80,10 @@ const FRAGMENT_SHADER = `
 precision highp float;
 
 uniform float uSurfaceMode;
+uniform float uMaterialRole;
 uniform vec3  uBaseColor;
 uniform vec3  uShoulderColor;  // colour at road edge, blends to terrain grass
+uniform vec3  uTerrainColor;
 
 varying vec3 vWorldPos;
 varying vec2 vRoadUv;
@@ -138,8 +148,32 @@ void main(void) {
 
 	// ── Surface pattern ───────────────────────────────────────────────────────
 	vec3 surfaceColor;
+	float outputAlpha = 1.0;
 
-	if (uSurfaceMode < 0.5) {
+	if (uMaterialRole > 0.5) {
+		// Terrain-blend shoulder. The visible outer edge becomes noisy dirt/grass
+		// and softly reveals the base terrain instead of a flat cut-out strip.
+		float broadNoise = fbm(vWorldPos.xz * 0.48 + vec2(vRoadUv.y * 0.017, 0.0));
+		float fineNoise = smoothNoise(vWorldPos.xz * 5.5 + vec2(0.0, vRoadUv.y * 0.09));
+		float irregularDist = distFromCenter + (broadNoise - 0.5) * 0.24 + (fineNoise - 0.5) * 0.08;
+		float roadDustT = smoothstep(0.14, 0.68, distFromCenter);
+		float terrainT = smoothstep(0.32, 0.78, irregularDist);
+		float edgeFadeT = smoothstep(0.86, 1.0, irregularDist);
+		float grit = smoothNoise(vWorldPos.xz * 10.0) * 0.08;
+		vec3 disturbedRoad = mix(uShoulderColor * 0.86, uTerrainColor, roadDustT * 0.58);
+		vec3 mottledTerrain = uTerrainColor * (0.88 + broadNoise * 0.20 + fineNoise * 0.07);
+
+		disturbedRoad += vec3(grit * 0.55, grit * 0.42, grit * 0.22);
+		surfaceColor = mix(disturbedRoad, mottledTerrain, terrainT);
+		surfaceColor = mix(
+			surfaceColor,
+			uShoulderColor * 0.82,
+			smoothstep(0.72, 0.98, distFromCenter) * fineNoise * 0.10
+		);
+		surfaceColor = clamp(surfaceColor, 0.0, 1.0);
+		outputAlpha = 1.0 - edgeFadeT * 0.95;
+
+	} else if (uSurfaceMode < 0.5) {
 		// ── COBBLESTONE ──────────────────────────────────────────────────────
 		// Scale: world * 4.0 → each Voronoi cell ~= 25 cm stone
 		vec2 stoneUv = vWorldPos.xz * 4.0;
@@ -196,8 +230,12 @@ void main(void) {
 	// ── Shoulder blend — colour-only, NO alpha ────────────────────────────────
 	// Blend road colour → shoulder colour across outer 20% of road width.
 	// This avoids transparent-quad seam artefacts entirely.
-	float shoulderT = smoothstep(0.60, 1.0, distFromCenter);
-	surfaceColor = mix(surfaceColor, uShoulderColor, shoulderT);
+	if (uMaterialRole < 0.5) {
+		float edgeNoise = fbm(vWorldPos.xz * 0.72 + vec2(vRoadUv.y * 0.021, 0.0));
+		float shoulderT = smoothstep(0.58, 1.02, distFromCenter + (edgeNoise - 0.5) * 0.16);
+		vec3 edgeColor = mix(uShoulderColor, uTerrainColor, shoulderT * 0.36);
+		surfaceColor = mix(surfaceColor, edgeColor, shoulderT);
+	}
 
 	// ── Lighting ──────────────────────────────────────────────────────────────
 	vec3 sunL     = normalize(vec3(0.4, 1.0, -0.2));
@@ -214,7 +252,7 @@ void main(void) {
 	float NdotL   = max(dot(N, sunL), 0.0);
 	vec3  diffuse = sunColor * 1.05 * NdotL;
 
-	float roughness = 0.82;
+	float roughness = mix(0.82, 0.94, uMaterialRole);
 	float shininess = exp2((1.0 - roughness) * 5.0 + 1.0);
 	vec3  halfVec   = normalize(sunL + vec3(0.0, 1.0, 0.0));
 	float spec      = pow(max(dot(N, halfVec), 0.0), shininess) * (1.0 - roughness) * 0.04;
@@ -222,7 +260,7 @@ void main(void) {
 	vec3 color = (ambient + diffuse) * surfaceColor + sunColor * spec;
 	color = pow(clamp(color, 0.0, 1.0), vec3(1.0 / 2.2));
 
-	gl_FragColor = vec4(color, 1.0);
+	gl_FragColor = vec4(color, outputAlpha);
 }
 `;
 
@@ -234,16 +272,22 @@ Effect.ShadersStore[`${SHADER_NAME}FragmentShader`] = FRAGMENT_SHADER;
 const COBBLESTONE_BASE = new Color3(0.56, 0.51, 0.43);
 /** Sandy mortar shoulder at the very edge of the cobblestone road. */
 const COBBLESTONE_SHOULDER = new Color3(0.46, 0.43, 0.34);
+/** Terrain-tinted noisy edge used where city roads meet grass/ground. */
+const COBBLESTONE_TERRAIN = new Color3(0.27, 0.38, 0.18);
 
 /** Warm reddish-brown volcanic earth for rural dirt road surface. */
 const DIRT_BASE = new Color3(0.5, 0.37, 0.23);
 /** Earthy green-brown at dirt road shoulder → matches grass terrain. */
 const DIRT_SHOULDER = new Color3(0.38, 0.4, 0.27);
+/** Terrain-tinted edge used around rural dirt roads. */
+const DIRT_TERRAIN = new Color3(0.25, 0.34, 0.17);
 
 /** Dry pale ochre for packed-earth walk paths. */
 const EARTH_BASE = new Color3(0.6, 0.5, 0.36);
 /** Lighter sandy edge for packed-earth path shoulder. */
 const EARTH_SHOULDER = new Color3(0.44, 0.43, 0.31);
+/** Dry green-brown terrain edge used around packed-earth paths. */
+const EARTH_TERRAIN = new Color3(0.34, 0.36, 0.21);
 
 const SURFACE_MODE: Record<RoadSurfaceType, number> = {
 	cobblestone: 0,
@@ -251,16 +295,22 @@ const SURFACE_MODE: Record<RoadSurfaceType, number> = {
 	earth: 2,
 };
 
+const MATERIAL_ROLE_MODE: Record<RoadSurfaceMaterialRole, number> = {
+	surface: 0,
+	terrainBlend: 1,
+};
+
 /**
- * Creates an opaque ShaderMaterial for a road surface ribbon.
+ * Creates a ShaderMaterial for a road surface ribbon.
  *
- * Fully opaque — no alpha blending — to eliminate seam artefacts between
- * adjacent road quads. Edge-to-terrain transition is colour-blended only.
+ * Road cores stay opaque. Terrain-blend shoulders can alpha fade at their
+ * outer edge so the base terrain texture remains visible under the transition.
  */
 export const createRoadSurfaceMaterial = (
 	name: string,
 	surfaceType: RoadSurfaceType,
 	scene: Scene,
+	materialRole: RoadSurfaceMaterialRole = 'surface',
 ): ShaderMaterial => {
 	const material = new ShaderMaterial(
 		`${name}-mat`,
@@ -268,33 +318,46 @@ export const createRoadSurfaceMaterial = (
 		{ vertex: SHADER_NAME, fragment: SHADER_NAME },
 		{
 			attributes: ['position', 'normal', 'uv'],
-			uniforms: ['worldViewProjection', 'world', 'uSurfaceMode', 'uBaseColor', 'uShoulderColor'],
-			// Fully opaque — no alpha blending, avoids quad-seam artefacts
-			needAlphaBlending: false,
+			uniforms: [
+				'worldViewProjection',
+				'world',
+				'uSurfaceMode',
+				'uMaterialRole',
+				'uBaseColor',
+				'uShoulderColor',
+				'uTerrainColor',
+			],
+			needAlphaBlending: materialRole === 'terrainBlend',
 			needAlphaTesting: false,
 		},
 	);
 
 	let baseColor: Color3;
 	let shoulderColor: Color3;
+	let terrainColor: Color3;
 
 	switch (surfaceType) {
 		case 'cobblestone':
 			baseColor = COBBLESTONE_BASE;
 			shoulderColor = COBBLESTONE_SHOULDER;
+			terrainColor = COBBLESTONE_TERRAIN;
 			break;
 		case 'earth':
 			baseColor = EARTH_BASE;
 			shoulderColor = EARTH_SHOULDER;
+			terrainColor = EARTH_TERRAIN;
 			break;
 		default:
 			baseColor = DIRT_BASE;
 			shoulderColor = DIRT_SHOULDER;
+			terrainColor = DIRT_TERRAIN;
 	}
 
 	material.setFloat('uSurfaceMode', SURFACE_MODE[surfaceType]);
+	material.setFloat('uMaterialRole', MATERIAL_ROLE_MODE[materialRole]);
 	material.setColor3('uBaseColor', baseColor);
 	material.setColor3('uShoulderColor', shoulderColor);
+	material.setColor3('uTerrainColor', terrainColor);
 	material.backFaceCulling = false;
 
 	return material;

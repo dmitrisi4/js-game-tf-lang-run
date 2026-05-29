@@ -100,3 +100,15 @@ Gate:
 - Runtime road overlays stay visual-only for physics, but can be recognized by the player visual grounding ray.
 - `terrain=real` keeps baked roads as the default, with mesh roads reserved for explicit comparison/debug modes.
 - Focused tests cover road mesh naming, pickability intent, and road surface helper behavior.
+
+## Phase 9. Road Edge Blend Polish
+
+Status: Done
+
+Make optional mesh road overlays blend into the base terrain more naturally, especially at the visible outer shoulders.
+
+Gate:
+- Road shoulder overlays no longer render as flat, single-color strips.
+- Road surface edges pick up terrain/dirt variation before meeting the base texture.
+- The change remains visual-only and does not alter player movement or physics authority.
+- Focused tests cover the material role selection that drives edge-blend rendering.

@@ -229,3 +229,35 @@ Implementation:
 Risks:
 - Pickable road meshes can add raycast candidates, so only player visual grounding should opt into them by name.
 - Lower road lift may reveal z-fighting on some slopes; material depth offset should carry the rendering bias without widening the physical/visual gap.
+
+## Phase 9 Road Edge Blend Polish
+
+References used:
+- `AGENTS.md`
+- `docs/llm-wiki/index.md`
+- `docs/llm-wiki/scene-architecture.md`
+- `docs/reference/runtime-architecture.md`
+- `docs/reference/scene-gameplay.md`
+- `docs/reference/asset-pipeline.md`
+- `docs/reference/physics-collision.md`
+- `docs/reference/tech-stack-validation.md`
+
+Goal:
+- Reduce the hard visual seam where optional runtime road overlays meet the base terrain texture.
+- Keep the baked `terrain=real` PBR road path as the production direction.
+
+Implementation:
+- Update `src/scenes/environment/roadSurfaceShader.ts`:
+	- add a material role for terrain-blend shoulder passes
+	- keep road cores opaque to avoid transparent quad seams
+	- add noisy terrain/dirt color mixing at the road edge
+	- alpha-fade only the outer shoulder edge so the base terrain texture shows through
+	- keep cobblestone/dirt/earth surface modes intact for road cores
+- Update `src/scenes/environment/TenerifeGeoRoadLayers.tsx`:
+	- route shoulder passes through the road surface shader instead of flat `StandardMaterial`
+	- slightly widen shoulder influence so the transition has room to breathe
+- Update focused tests for material role selection and layered pass intent.
+
+Risks:
+- The shader still cannot sample the actual terrain albedo, so this is a visual blend approximation, not true texture compositing.
+- Over-widened shoulders can make roads read too broad at compressed full-island scale, so keep width increases conservative.

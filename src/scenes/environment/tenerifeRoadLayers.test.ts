@@ -1,6 +1,7 @@
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { describe, expect, it } from 'vitest';
 import tenerifeRoadGeoJsonRaw from '../../../data/tenerife2/export.geojson?raw';
+import { getRoadSurfaceMaterialRole } from './roadSurfaceShader';
 import {
 	buildRoadJunctionGeometry,
 	buildRoadRibbonGeometry,
@@ -90,9 +91,16 @@ describe('tenerife road layers', () => {
 		);
 
 		expect(mainPasses.map((pass) => pass.nameSuffix)).toEqual(['shoulder', 'surface']);
+		expect(mainPasses.map((pass) => pass.materialRole)).toEqual(['terrainBlend', 'surface']);
 		expect(mainPasses[0].width).toBeGreaterThan(mainPasses[1].width);
 		expect(servicePasses.map((pass) => pass.nameSuffix)).toEqual(['shoulder', 'surface']);
+		expect(servicePasses.map((pass) => pass.materialRole)).toEqual(['terrainBlend', 'surface']);
 		expect(servicePasses[0].width).toBeGreaterThan(servicePasses[1].width);
+	});
+
+	it('maps shoulder road passes to terrain-blend materials', () => {
+		expect(getRoadSurfaceMaterialRole('shoulder')).toBe('terrainBlend');
+		expect(getRoadSurfaceMaterialRole('surface')).toBe('surface');
 	});
 
 	it('builds continuous road ribbon geometry with shared joins', () => {

@@ -190,3 +190,35 @@ Verification notes:
 - Dev server started at `http://127.0.0.1:5175/` after `5174` was already in use.
 - HTTP smoke for `/?tenerife=1&terrain=real&roads=both`, `puerto-de-la-cruz-terrain.glb`, `puerto-city-albedo.png`, `puerto-city-normal.png`, `puerto-city-orm.png`, and `roads-runtime.json` returned `200 OK`.
 - Blocked - visual browser smoke: Browser/DevTools backend was unavailable because the Chrome DevTools MCP profile was already running, and Playwright is not installed in this project.
+
+## 9. Road Edge Blend Polish
+
+Status: Done
+
+References used:
+- `AGENTS.md`
+- `docs/llm-wiki/index.md`
+- `docs/llm-wiki/scene-architecture.md`
+- `docs/reference/runtime-architecture.md`
+- `docs/reference/scene-gameplay.md`
+- `docs/reference/asset-pipeline.md`
+- `docs/reference/physics-collision.md`
+- `docs/reference/tech-stack-validation.md`
+- `docs/reference/documentation-maintenance.md`
+
+Tasks:
+- [x] Identify why road edges still read as cut-out strips.
+- [x] Add a terrain-blend material role for road shoulders.
+- [x] Render shoulder passes through the road shader instead of a flat material.
+- [x] Add noisy dirt/terrain mixing to the visible road edge.
+- [x] Add focused tests for material role selection.
+- [x] Run targeted validation and record results.
+- [x] Add a session log for the implementation.
+
+Verification notes:
+- `bun run test -- src/scenes/environment/tenerifeRoadLayers.test.ts src/scenes/environment/tenerifeRoadMeshNames.test.ts` passed: 2 files, 14 tests.
+- `./node_modules/.bin/tsc -p tsconfig.app.json --noEmit` passed.
+- `./node_modules/.bin/biome check src/scenes/environment/roadSurfaceShader.ts src/scenes/environment/TenerifeGeoRoadLayers.tsx src/scenes/environment/tenerifeRoadLayers.test.ts` passed.
+- `bun run check` passed.
+- `bun run build` passed with the existing Vite large chunk warning.
+- Browser smoke passed at `http://127.0.0.1:5175/?tenerife=1&terrain=island-full&roads=mesh`: canvas loaded at `1440 x 810`, center pixel was nonblank, and screenshot saved to `docs/history/logs/2026-05-28-road-edge-blend-browser-smoke-v5.png`.

@@ -1,5 +1,4 @@
 import { Ray } from '@babylonjs/core/Culling/ray';
-import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { Mesh } from '@babylonjs/core/Meshes/mesh';
@@ -7,7 +6,12 @@ import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useBeforeRender, useScene } from 'react-babylonjs';
-import { createRoadSurfaceMaterial, getRoadSurfaceType } from './roadSurfaceShader';
+import {
+	createRoadSurfaceMaterial,
+	getRoadSurfaceMaterialRole,
+	getRoadSurfaceType,
+	type RoadSurfaceMaterialRole,
+} from './roadSurfaceShader';
 import { isTenerifeFullIslandTerrainMeshName } from './tenerifeFullIslandConfig';
 import { measureTenerifeSyncStep } from './tenerifePerformance';
 import {
@@ -33,6 +37,7 @@ type RoadHeightCacheType = Map<string, number | null>;
 type RoadVisualPassType = {
 	color: Color3;
 	hasJunctionPads: boolean;
+	materialRole: RoadSurfaceMaterialRole;
 	nameSuffix: string;
 	surfaceBias: number;
 	width: number;
@@ -161,13 +166,15 @@ export const getTenerifeRoadVisualPasses = (
 			{
 				color: ROAD_SHOULDER_COLOR,
 				hasJunctionPads: true,
+				materialRole: getRoadSurfaceMaterialRole('shoulder'),
 				nameSuffix: 'shoulder',
 				surfaceBias: ROAD_SHOULDER_SURFACE_BIAS,
-				width: width * 1.35,
+				width: width * 1.42,
 			},
 			{
 				color: ROAD_MAIN_SURFACE_COLOR,
 				hasJunctionPads: true,
+				materialRole: getRoadSurfaceMaterialRole('surface'),
 				nameSuffix: 'surface',
 				surfaceBias: ROAD_SURFACE_BIAS,
 				width,
@@ -180,13 +187,15 @@ export const getTenerifeRoadVisualPasses = (
 			{
 				color: ROAD_SHOULDER_COLOR.scale(0.9),
 				hasJunctionPads: true,
+				materialRole: getRoadSurfaceMaterialRole('shoulder'),
 				nameSuffix: 'shoulder',
 				surfaceBias: ROAD_SHOULDER_SURFACE_BIAS,
-				width: width * 1.22,
+				width: width * 1.3,
 			},
 			{
 				color: ROAD_SERVICE_SURFACE_COLOR,
 				hasJunctionPads: true,
+				materialRole: getRoadSurfaceMaterialRole('surface'),
 				nameSuffix: 'surface',
 				surfaceBias: ROAD_SURFACE_BIAS,
 				width: width * 0.88,
@@ -198,6 +207,7 @@ export const getTenerifeRoadVisualPasses = (
 		{
 			color,
 			hasJunctionPads: true,
+			materialRole: getRoadSurfaceMaterialRole('surface'),
 			nameSuffix: 'surface',
 			surfaceBias: ROAD_SURFACE_BIAS,
 			width,
@@ -404,6 +414,7 @@ const createRoadRibbonMeshWithUv = (
 	width: number,
 	layerId: TenerifeRoadLayerId,
 	isInsideCity: boolean,
+	materialRole: RoadSurfaceMaterialRole,
 	scene: NonNullable<ReturnType<typeof useScene>>,
 	roadTransform?: TenerifeRoadTransformType,
 	groundHeightProvider?: GroundHeightProviderType,
@@ -544,30 +555,11 @@ const createRoadRibbonMeshWithUv = (
 		vertexData.uvs = uvs;
 		vertexData.applyToMesh(mesh);
 
-		// Use procedural surface shader for surface passes; plain material for
-		// shoulder passes that are purely decorative color strips.
-		const isSurfacePass = name.endsWith('-surface');
-		if (isSurfacePass) {
-			const surfaceType = getRoadSurfaceType(layerId, isInsideCity);
-			const material = createRoadSurfaceMaterial(name, surfaceType, scene);
-			material.zOffset = ROAD_MATERIAL_Z_OFFSET;
-			material.zOffsetUnits = ROAD_MATERIAL_Z_OFFSET_UNITS;
-			mesh.material = material;
-		} else {
-			// Shoulders keep simple emissive colors for contrast.
-			const material = new StandardMaterial(`${name}-material`, scene);
-			material.backFaceCulling = false;
-
-			material.diffuseColor = isInsideCity
-				? Color3.FromHexString('#968672')
-				: Color3.FromHexString('#7a6a4a');
-			material.emissiveColor = material.diffuseColor.scale(0.12);
-			material.specularColor = Color3.FromHexString('#15120f');
-			material.zOffset = ROAD_MATERIAL_Z_OFFSET;
-			material.zOffsetUnits = ROAD_MATERIAL_Z_OFFSET_UNITS;
-			material.freeze();
-			mesh.material = material;
-		}
+		const surfaceType = getRoadSurfaceType(layerId, isInsideCity);
+		const material = createRoadSurfaceMaterial(name, surfaceType, scene, materialRole);
+		material.zOffset = ROAD_MATERIAL_Z_OFFSET;
+		material.zOffsetUnits = ROAD_MATERIAL_Z_OFFSET_UNITS;
+		mesh.material = material;
 
 		mesh.isPickable = isTenerifeRoadVisualSupportMeshName(name);
 		mesh.doNotSyncBoundingInfo = true;
@@ -584,7 +576,7 @@ const createRoadRibbonMeshWithUv = (
  * - City main roads → Voronoi cobblestone (warm grey Canarian stone)
  * - Rural main / service roads → dirt track with ruts (warm volcanic earth)
  * - Walk paths → packed earth
- * - All surfaces fade to terrain color at edges via alpha blending
+ * - Road cores stay opaque; outer shoulders alpha-fade into terrain.
  */
 const TenerifeGeoRoadLayers: React.FC<PropsType> = ({
 	groundHeightProvider,
@@ -647,6 +639,7 @@ const TenerifeGeoRoadLayers: React.FC<PropsType> = ({
 						pass.width,
 						layer.id,
 						isInsideCity,
+						pass.materialRole,
 						scene,
 						roadTransform,
 						groundHeightProvider,
