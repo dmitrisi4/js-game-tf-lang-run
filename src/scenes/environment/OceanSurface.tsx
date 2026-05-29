@@ -73,18 +73,41 @@ const OceanSurface: React.FC<PropsType> = ({ bounds, name, opacity = 0.82, surfa
 		material.specularPower = 96;
 		material.alpha = opacity;
 
+		const shouldRenderInWater = (mesh: AbstractMesh): boolean => {
+			if (mesh.name === name || !mesh.isVisible || !mesh.isEnabled()) {
+				return false;
+			}
+
+			// Exclude purely visual helpers, small particles, skyboxes (rendered differently),
+			// and very small meshes to optimize render targets.
+			if (
+				mesh.name.includes('waterline') ||
+				mesh.name.includes('ripple') ||
+				mesh.name.includes('splash')
+			) {
+				return false;
+			}
+
+			// Exclude small meshes (e.g. pickups, small props) based on bounding sphere radius if available
+			if (mesh.getBoundingInfo && mesh.getBoundingInfo().boundingSphere.radius < 2) {
+				return false;
+			}
+
+			return true;
+		};
+
 		// Register existing meshes for WaterMaterial reflection + refraction RTTs.
 		// Must use addToRenderList() — pushing directly to material.renderList only
 		// writes to the refraction RTT getter and misses the reflection RTT entirely.
 		for (const mesh of scene.meshes) {
-			if (mesh.name !== name && mesh.isVisible && mesh.isEnabled()) {
+			if (shouldRenderInWater(mesh)) {
 				material.addToRenderList(mesh);
 			}
 		}
 
 		// Handle dynamically added meshes
 		const observer = scene.onNewMeshAddedObservable.add((mesh: AbstractMesh) => {
-			if (mesh.name !== name) {
+			if (shouldRenderInWater(mesh)) {
 				material.addToRenderList(mesh);
 			}
 		});

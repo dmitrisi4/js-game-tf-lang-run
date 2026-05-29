@@ -1,4 +1,5 @@
 import { FreeCamera } from '@babylonjs/core/Cameras/freeCamera';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import type { Mesh } from '@babylonjs/core/Meshes/mesh';
 import type { Observer } from '@babylonjs/core/Misc/observable';
@@ -6,6 +7,7 @@ import type { Scene as BabylonScene } from '@babylonjs/core/scene';
 import type React from 'react';
 import { useEffect, useRef } from 'react';
 import { useScene } from 'react-babylonjs';
+import { TENERIFE_FULL_ISLAND_WATER_SURFACE_Y } from '@/scenes/environment/tenerifeFullIslandConfig';
 
 const CAMERA_DISTANCE = 8.5;
 const CAMERA_FOCUS_CENTER_OFFSET = 0.72;
@@ -168,6 +170,11 @@ const SceneCamera: React.FC<PropsType> = ({ isCameraInputEnabled, targetMesh }) 
 
 		let observer: Observer<BabylonScene> | null = null;
 
+		const defaultFogMode = scene.fogMode;
+		const defaultFogDensity = scene.fogDensity;
+		const defaultFogColor = scene.fogColor.clone();
+		const underwaterFogColor = Color3.FromHexString('#04344f');
+
 		observer = scene.onBeforeRenderObservable.add(() => {
 			if (!cameraRef.current || !targetMesh) {
 				return;
@@ -192,12 +199,26 @@ const SceneCamera: React.FC<PropsType> = ({ isCameraInputEnabled, targetMesh }) 
 				CAMERA_LERP_AMOUNT,
 			);
 			cameraRef.current.setTarget(focusTarget);
+
+			// Underwater fog check
+			if (cameraRef.current.position.y < TENERIFE_FULL_ISLAND_WATER_SURFACE_Y) {
+				scene.fogMode = 2; // BABYLON.Scene.FOGMODE_EXP
+				scene.fogDensity = 0.08;
+				scene.fogColor.copyFrom(underwaterFogColor);
+			} else {
+				scene.fogMode = defaultFogMode;
+				scene.fogDensity = defaultFogDensity;
+				scene.fogColor.copyFrom(defaultFogColor);
+			}
 		});
 
 		return () => {
 			if (observer) {
 				scene.onBeforeRenderObservable.remove(observer);
 			}
+			scene.fogMode = defaultFogMode;
+			scene.fogDensity = defaultFogDensity;
+			scene.fogColor.copyFrom(defaultFogColor);
 		};
 	}, [scene, targetMesh]);
 

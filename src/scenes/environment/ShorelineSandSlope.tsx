@@ -11,6 +11,7 @@ import type React from 'react';
 import { useEffect } from 'react';
 import { useScene } from 'react-babylonjs';
 import { getShorelineSandSlopeConfig, type OceanBoundsType } from './oceanVisualConfig';
+import { fetchPrecalculatedShoreline } from './ShorelineSurf';
 import { isTenerifeFullIslandTerrainMeshName } from './tenerifeFullIslandConfig';
 
 const SHORELINE_BUCKET_COUNT = 192;
@@ -234,33 +235,63 @@ const ShorelineSandSlope: React.FC<PropsType> = ({ bounds, name, surfaceY }) => 
 		material.emissiveColor = Color3.FromHexString('#3c2f17');
 		material.specularColor = Color3.FromHexString('#1a1409');
 
+		let isFetching = false;
+		let usingFallback = false;
+
 		observer = scene.onBeforeRenderObservable.add(() => {
-			if (slope || frameCount >= SHORELINE_SAND_REBUILD_FRAME_LIMIT) {
+			if (slope) {
 				return;
 			}
 
-			frameCount += 1;
-			const shorelinePath = getShorelinePathFromTerrain(scene.meshes, surfaceY);
-
-			if (shorelinePath.length < SHORELINE_SAND_MIN_POINTS) {
+			if (!isFetching && !usingFallback) {
+				isFetching = true;
+				fetchPrecalculatedShoreline(surfaceY, 0).then((path) => {
+					isFetching = false;
+					if (path && path.length >= SHORELINE_SAND_MIN_POINTS) {
+						slope = createSandSlopeMesh(
+							scene,
+							name,
+							path,
+							surfaceY,
+							config.beachInset,
+							config.slopeWidth,
+							config.underwaterDrop,
+							config.maxSegmentLength,
+						);
+						slope.material = material;
+						if (observer) {
+							scene.onBeforeRenderObservable.remove(observer);
+							observer = null;
+						}
+					} else {
+						usingFallback = true;
+					}
+				});
 				return;
 			}
 
-			slope = createSandSlopeMesh(
-				scene,
-				name,
-				shorelinePath,
-				surfaceY,
-				config.beachInset,
-				config.slopeWidth,
-				config.underwaterDrop,
-				config.maxSegmentLength,
-			);
-			slope.material = material;
+			if (usingFallback && frameCount < SHORELINE_SAND_REBUILD_FRAME_LIMIT) {
+				frameCount += 1;
+				const shorelinePath = getShorelinePathFromTerrain(scene.meshes, surfaceY);
 
-			if (observer) {
-				scene.onBeforeRenderObservable.remove(observer);
-				observer = null;
+				if (shorelinePath.length >= SHORELINE_SAND_MIN_POINTS) {
+					slope = createSandSlopeMesh(
+						scene,
+						name,
+						shorelinePath,
+						surfaceY,
+						config.beachInset,
+						config.slopeWidth,
+						config.underwaterDrop,
+						config.maxSegmentLength,
+					);
+					slope.material = material;
+
+					if (observer) {
+						scene.onBeforeRenderObservable.remove(observer);
+						observer = null;
+					}
+				}
 			}
 		});
 
