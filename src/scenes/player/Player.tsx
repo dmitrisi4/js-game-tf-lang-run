@@ -26,6 +26,7 @@ import {
 	PLAYER_CAPSULE_DIAMETER,
 	PLAYER_CAPSULE_HEIGHT,
 } from './playerCapsuleMetrics';
+import { lerpVelocityXZ, projectOntoSurface } from './playerMovementPhysics';
 import {
 	isFloorLikeNormal,
 	isPlayerGroundMeshName,
@@ -66,13 +67,20 @@ type PropsType = {
 const PLAYER_MOVE_SPEED = 4.5;
 const PLAYER_SPRINT_SPEED = 7;
 const PLAYER_JUMP_VELOCITY = 6.5;
-const PLAYER_JUMP_PHYSICS_DELAY_MS = 310;
-const PLAYER_JUMP_QUEUE_EXPIRE_MS = 260;
+/** Phase 3: reduced from 310 ms — jump fires within one render frame of press. */
+const PLAYER_JUMP_PHYSICS_DELAY_MS = 80;
+const PLAYER_JUMP_QUEUE_EXPIRE_MS = 180;
 const PLAYER_GROUND_RAY_LENGTH = 1.28;
-const PLAYER_GROUND_MAX_VERTICAL_SPEED = 0.45;
+/** Phase 2: distance-based grounded guard; replaces the rigid vertical-speed cap. */
+const PLAYER_GROUND_MAX_DISTANCE = 1.35;
 const TENERIFE_FULL_ISLAND_SUPPORT_RAY_HEIGHT = 80;
 const TENERIFE_FULL_ISLAND_SUPPORT_RAY_LENGTH = 180;
 const PLAYER_MAX_FALL_SPEED = -18;
+/** Phase 4: acceleration / deceleration exponent rates (higher = snappier). */
+const PLAYER_MOVE_ACCELERATION = 18;
+const PLAYER_STOP_DECELERATION = 24;
+/** Phase 5: fraction of full ground control available while airborne (0–1). */
+const PLAYER_AIR_CONTROL = 0.35;
 const PLAYER_SPAWN_POSITION = new Vector3(-7, 1.5, -6);
 const PLAYER_PHYSICS_OPTIONS = {
 	mass: 1,
@@ -281,6 +289,8 @@ const Player: React.FC<PropsType> = ({
 	const facingYawRef = useRef(0);
 	const previousJumpCommandRef = useRef(false);
 	const pendingJumpPhysicsAtRef = useRef<number | null>(null);
+	/** Phase 4: tracks the last lerped XZ velocity so inertia is continuous across frames. */
+	const smoothedHorizontalVelocityRef = useRef(Vector3.Zero());
 	const roofLandingsRef = useRef<RoofLandingPointType[]>([]);
 	const roofParkourStateRef = useRef<RoofParkourStateType>({ kind: 'idle' });
 	const roofParkourDebugRef = useRef<RoofParkourDebugRendererType | null>(null);
@@ -462,10 +472,15 @@ const Player: React.FC<PropsType> = ({
 				(mesh) => isPlayerGroundMeshName(mesh.name) && mesh.isEnabled() && mesh.isPickable,
 			);
 			const groundNormal = groundHit?.getNormal(true, false) ?? null;
+			/**
+			 * Phase 2: use ray hit distance instead of vertical speed to determine grounded.
+			 * The old speed cap (0.45 m/s) falsely triggered "airborne" on downhill slopes.
+			 * Distance check is stable regardless of descent velocity.
+			 */
 			const isGrounded =
 				Boolean(groundHit?.hit) &&
 				isFloorLikeNormal(groundNormal) &&
-				Math.abs(currentVerticalVelocity) <= PLAYER_GROUND_MAX_VERTICAL_SPEED;
+				(groundHit?.distance ?? Number.MAX_VALUE) <= PLAYER_GROUND_MAX_DISTANCE;
 
 			const now = performance.now();
 			const pendingJumpPhysicsAt = pendingJumpPhysicsAtRef.current;
@@ -538,12 +553,50 @@ const Player: React.FC<PropsType> = ({
 			const nextIsSprinting = nextIsMoving && commandsRef.current.sprint;
 			const nextMoveSpeed = nextIsSprinting ? PLAYER_SPRINT_SPEED : PLAYER_MOVE_SPEED;
 			const nextIsAirborne = shouldTriggerJump || !isGrounded;
+			const deltaSeconds = Math.min(scene.getEngine().getDeltaTime() / 1000, 0.05);
+
+			/**
+			 * Phase 1: project movement direction onto the ground surface so the player
+			 * follows slopes instead of wedging horizontally into them.
+			 * On flat ground (normal = up) this is a no-op.
+			 */
+			const slopeAdjustedDirection =
+				groundNormal && isGrounded
+					? projectOntoSurface(movementDirection, groundNormal)
+					: movementDirection;
+
+			/**
+			 * Phase 5: reduce air control to a fraction of ground control so the player
+			 * cannot fully reverse direction mid-flight.
+			 */
+			const controlledDirection = nextIsAirborne
+				? slopeAdjustedDirection.scale(PLAYER_AIR_CONTROL)
+				: slopeAdjustedDirection;
+
+			/** Target XZ velocity this frame (zero when no input). */
+			const targetXZ = new Vector3(
+				controlledDirection.x * nextMoveSpeed,
+				0,
+				controlledDirection.z * nextMoveSpeed,
+			);
+
+			/**
+			 * Phase 4: lerp toward the target XZ velocity using exponential decay so
+			 * movement has perceptible acceleration and deceleration.
+			 */
+			smoothedHorizontalVelocityRef.current = lerpVelocityXZ(
+				smoothedHorizontalVelocityRef.current,
+				targetXZ,
+				PLAYER_MOVE_ACCELERATION,
+				PLAYER_STOP_DECELERATION,
+				deltaSeconds,
+			);
 
 			physicsBody.setLinearVelocity(
 				new Vector3(
-					movementDirection.x * nextMoveSpeed,
+					smoothedHorizontalVelocityRef.current.x,
 					shouldTriggerJump ? PLAYER_JUMP_VELOCITY : nextVerticalVelocity,
-					movementDirection.z * nextMoveSpeed,
+					smoothedHorizontalVelocityRef.current.z,
 				),
 			);
 
