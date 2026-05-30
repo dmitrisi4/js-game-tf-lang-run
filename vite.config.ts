@@ -6,6 +6,14 @@ import { defineConfig } from 'vite';
 export default defineConfig({
 	base: '/js-game-tf-lang-run/',
 	plugins: [react()],
+	build: {
+		rolldownOptions: {
+			output: {
+				// Babylon engine modules contain circular inheritance paths; keep them in one production chunk.
+				codeSplitting: false,
+			},
+		},
+	},
 	resolve: {
 		alias: {
 			'@': path.resolve(__dirname, './src'),
