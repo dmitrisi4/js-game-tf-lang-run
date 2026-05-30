@@ -7,12 +7,17 @@ import type { Observer } from '@babylonjs/core/Misc/observable';
 import { ParticleSystem } from '@babylonjs/core/Particles/particleSystem';
 import type { Scene } from '@babylonjs/core/scene';
 
-const SPLASH_PARTICLE_CAPACITY = 96;
-const SPLASH_STOP_DURATION_SECONDS = 0.12;
-const SPLASH_DISPOSE_DELAY_MS = 1200;
+const SPLASH_PARTICLE_CAPACITY = 192;
 const FOAM_RING_DURATION_SECONDS = 0.72;
 
-const createSplashParticleTexture = (scene: Scene): DynamicTexture => {
+let splashParticleSystem: ParticleSystem | null = null;
+let splashParticleTexture: DynamicTexture | null = null;
+
+const getSharedSplashParticleTexture = (scene: Scene): DynamicTexture => {
+	if (splashParticleTexture) {
+		return splashParticleTexture;
+	}
+
 	const texture = new DynamicTexture('water-entry-splash-particle-texture', 64, scene, false);
 	const context = texture.getContext();
 	const gradient = context.createRadialGradient(32, 32, 2, 32, 32, 30);
@@ -27,7 +32,52 @@ const createSplashParticleTexture = (scene: Scene): DynamicTexture => {
 	context.fill();
 	texture.update(false);
 
+	splashParticleTexture = texture;
 	return texture;
+};
+
+export const getSharedWaterEntrySplashSystem = (scene: Scene): ParticleSystem => {
+	if (splashParticleSystem) {
+		return splashParticleSystem;
+	}
+
+	const splash = new ParticleSystem('player-water-entry-splash', SPLASH_PARTICLE_CAPACITY, scene);
+
+	splash.particleTexture = getSharedSplashParticleTexture(scene);
+	// Start out of view
+	splash.emitter = new Vector3(0, -9999, 0);
+	splash.blendMode = ParticleSystem.BLENDMODE_STANDARD;
+	splash.color1 = new Color4(0.84, 0.98, 1, 0.82);
+	splash.color2 = new Color4(1, 1, 1, 0.68);
+	splash.colorDead = new Color4(0.66, 0.9, 0.95, 0);
+	splash.createDirectedSphereEmitter(
+		0.42,
+		new Vector3(-1.4, 0.28, -1.4),
+		new Vector3(1.4, 1.9, 1.4),
+	);
+	splash.emitRate = 0; // Don't emit by default
+	splash.gravity = new Vector3(0, -4.2, 0);
+	splash.minLifeTime = 0.28;
+	splash.maxLifeTime = 0.68;
+	splash.minSize = 0.12;
+	splash.maxSize = 0.42;
+
+	// Pre-start so manual emits work
+	splash.start();
+
+	splashParticleSystem = splash;
+	return splash;
+};
+
+export const disposeSharedWaterEntryEffects = (): void => {
+	if (splashParticleSystem) {
+		splashParticleSystem.dispose();
+		splashParticleSystem = null;
+	}
+	if (splashParticleTexture) {
+		splashParticleTexture.dispose();
+		splashParticleTexture = null;
+	}
 };
 
 const createFoamEntryRing = (scene: Scene, position: Vector3): void => {
@@ -78,34 +128,13 @@ const createFoamEntryRing = (scene: Scene, position: Vector3): void => {
 
 /** Emits a short one-shot splash when the player crosses into water. */
 export const createWaterEntrySplash = (scene: Scene, position: Vector3): void => {
-	const splash = new ParticleSystem('player-water-entry-splash', SPLASH_PARTICLE_CAPACITY, scene);
-
 	createFoamEntryRing(scene, position);
 
-	splash.particleTexture = createSplashParticleTexture(scene);
-	splash.emitter = position.clone();
-	splash.blendMode = ParticleSystem.BLENDMODE_STANDARD;
-	splash.color1 = new Color4(0.84, 0.98, 1, 0.82);
-	splash.color2 = new Color4(1, 1, 1, 0.68);
-	splash.colorDead = new Color4(0.66, 0.9, 0.95, 0);
-	splash.createDirectedSphereEmitter(
-		0.42,
-		new Vector3(-1.4, 0.28, -1.4),
-		new Vector3(1.4, 1.9, 1.4),
-	);
-	splash.emitRate = 680;
-	splash.gravity = new Vector3(0, -4.2, 0);
-	splash.minLifeTime = 0.28;
-	splash.maxLifeTime = 0.68;
-	splash.minSize = 0.12;
-	splash.maxSize = 0.42;
-	splash.targetStopDuration = SPLASH_STOP_DURATION_SECONDS;
-	splash.disposeOnStop = true;
-	splash.start();
+	const splash = getSharedWaterEntrySplashSystem(scene);
+	if (splash.emitter instanceof Vector3) {
+		splash.emitter.copyFrom(position);
+	}
 
-	window.setTimeout(() => {
-		if (!splash.isDisposed) {
-			splash.dispose();
-		}
-	}, SPLASH_DISPOSE_DELAY_MS);
+	// Emit a burst of particles manually instead of recreating the system
+	splash.manualEmitCount = 68;
 };

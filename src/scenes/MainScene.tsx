@@ -28,6 +28,7 @@ import Player from '@/scenes/player/Player';
 import PlayerInputBridge from '@/scenes/player/PlayerInputBridge';
 import PlayerInteractionBridge from '@/scenes/player/PlayerInteractionBridge';
 import { usePlayerInput } from '@/scenes/player/usePlayerInput';
+import { disposeSharedWaterEntryEffects } from '@/scenes/player/waterEntryEffects';
 import PrototypeDonut from '@/scenes/prototyping/PrototypeDonut';
 import {
 	selectInventoryWords,
@@ -128,6 +129,7 @@ const MainScene: React.FC<PropsType> = () => {
 
 		return () => {
 			setIsPhysicsReady(false);
+			disposeSharedWaterEntryEffects();
 		};
 	}, [havokPlugin, sceneInstance]);
 

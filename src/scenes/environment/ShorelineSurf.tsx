@@ -55,6 +55,26 @@ const getRadialDirection = (point: Vector3): Vector3 => {
 	return direction.normalize();
 };
 
+export const fetchPrecalculatedShoreline = async (
+	surfaceY: number,
+	yOffset: number,
+): Promise<ShorelinePointType[]> => {
+	try {
+		const response = await fetch('/data/shoreline-path.json');
+		if (!response.ok) {
+			return [];
+		}
+
+		const data = await response.json();
+		return data.map((item: { angle: number; point: { x: number; z: number } }) => ({
+			angle: item.angle,
+			point: new Vector3(item.point.x, surfaceY + yOffset, item.point.z),
+		}));
+	} catch {
+		return [];
+	}
+};
+
 const getShorelinePathFromTerrain = (
 	meshes: AbstractMesh[],
 	surfaceY: number,
@@ -224,21 +244,48 @@ const ShorelineSurf: React.FC<PropsType> = ({ bounds, name, surfaceY }) => {
 		material.emissiveColor = Color3.FromHexString('#e8fff8');
 		material.specularColor = Color3.Black();
 
-		observer = scene.onBeforeRenderObservable.add(() => {
-			if (!ribbon && frameCount < SHORELINE_SURF_REBUILD_FRAME_LIMIT) {
-				frameCount += 1;
-				shorelinePath = getShorelinePathFromTerrain(scene.meshes, surfaceY);
+		let isFetching = false;
+		let usingFallback = false;
 
-				if (shorelinePath.length >= SHORELINE_SURF_MIN_POINTS) {
-					ribbon = createSurfRibbon(
-						scene,
-						name,
-						shorelinePath,
-						surfaceY,
-						surfConfig.surfWidth,
-						surfConfig.retreatSpeed,
-					);
-					ribbon.material = material;
+		observer = scene.onBeforeRenderObservable.add(() => {
+			if (!ribbon) {
+				if (!isFetching && !usingFallback) {
+					isFetching = true;
+					fetchPrecalculatedShoreline(surfaceY, SHORELINE_SURF_Y_OFFSET).then((path) => {
+						isFetching = false;
+						if (path && path.length >= SHORELINE_SURF_MIN_POINTS) {
+							shorelinePath = path;
+							ribbon = createSurfRibbon(
+								scene,
+								name,
+								shorelinePath,
+								surfaceY,
+								surfConfig.surfWidth,
+								surfConfig.retreatSpeed,
+							);
+							ribbon.material = material;
+						} else {
+							// Fallback to runtime extraction
+							usingFallback = true;
+						}
+					});
+				}
+
+				if (usingFallback && frameCount < SHORELINE_SURF_REBUILD_FRAME_LIMIT) {
+					frameCount += 1;
+					shorelinePath = getShorelinePathFromTerrain(scene.meshes, surfaceY);
+
+					if (shorelinePath.length >= SHORELINE_SURF_MIN_POINTS) {
+						ribbon = createSurfRibbon(
+							scene,
+							name,
+							shorelinePath,
+							surfaceY,
+							surfConfig.surfWidth,
+							surfConfig.retreatSpeed,
+						);
+						ribbon.material = material;
+					}
 				}
 			}
 
