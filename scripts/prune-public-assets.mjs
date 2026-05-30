@@ -15,6 +15,18 @@ const SOURCE_ONLY_EXTENSIONS = new Set([
 ]);
 
 const RUNTIME_ASSET_ALLOWLIST = new Set([
+	'models/build/buildings-pack-jan2019/OBJ/Building1_Small.mtl',
+	'models/build/buildings-pack-jan2019/OBJ/Building1_Small.obj',
+	'models/build/buildings-pack-jan2019/OBJ/Building2_Small.mtl',
+	'models/build/buildings-pack-jan2019/OBJ/Building2_Small.obj',
+	'models/build/buildings-pack-jan2019/OBJ/Building3_Small.mtl',
+	'models/build/buildings-pack-jan2019/OBJ/Building3_Small.obj',
+	'models/build/buildings-pack-jan2019/OBJ/Building4.mtl',
+	'models/build/buildings-pack-jan2019/OBJ/Building4.obj',
+	'models/build/buildings-pack-jan2019/OBJ/House1.mtl',
+	'models/build/buildings-pack-jan2019/OBJ/House1.obj',
+	'models/build/buildings-pack-jan2019/OBJ/House2.mtl',
+	'models/build/buildings-pack-jan2019/OBJ/House2.obj',
 	'models/collectibles/collectible-letter-crystal.glb',
 	'models/environment/puerto-de-la-cruz-terrain.glb',
 	'models/environment/tenerife-full-island-normalized.glb',

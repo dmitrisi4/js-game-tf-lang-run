@@ -26,12 +26,16 @@ describe('prune-public-assets', () => {
 		expect(shouldPrunePublicAsset('textures/Ground068_4K-JPG/Ground068_4K-JPG_Color.jpg')).toBe(
 			false,
 		);
+		expect(shouldPrunePublicAsset('models/build/buildings-pack-jan2019/OBJ/House1.obj')).toBe(false);
+		expect(shouldPrunePublicAsset('models/build/buildings-pack-jan2019/OBJ/House1.mtl')).toBe(false);
 		expect(shouldPrunePublicAsset('textures/tenerife/puerto-city-orm.png')).toBe(false);
 		expect(shouldPrunePublicAsset('textures/tenerife/puerto-city-normal.png')).toBe(false);
 	});
 
 	it('prunes source-only model and texture files from build output', () => {
-		expect(shouldPrunePublicAsset('models/build/buildings-pack-jan2019/OBJ/House1.obj')).toBe(true);
+		expect(
+			shouldPrunePublicAsset('models/build/buildings-pack-jan2019/OBJ/Building1_Large.obj'),
+		).toBe(true);
 		expect(shouldPrunePublicAsset('models/build/buildings-pack-jan2019/FBX/House1.fbx')).toBe(true);
 		expect(shouldPrunePublicAsset('models/hero/pumkinboy-rigged-animated-character.zip')).toBe(true);
 		expect(shouldPrunePublicAsset('textures/Ground068_4K-JPG/Ground068_4K-JPG_NormalDX.jpg')).toBe(
@@ -45,17 +49,24 @@ describe('prune-public-assets', () => {
 	it('removes pruned files while preserving allowlisted files', async () => {
 		const distDir = await mkdtemp(path.join(os.tmpdir(), 'keyarena-prune-'));
 		const runtimeAsset = path.join(distDir, 'models/environment/tenerife-full-island-normalized.glb');
-		const sourceAsset = path.join(distDir, 'models/build/buildings-pack-jan2019/OBJ/House1.obj');
+		const runtimeObjAsset = path.join(distDir, 'models/build/buildings-pack-jan2019/OBJ/House1.obj');
+		const sourceAsset = path.join(
+			distDir,
+			'models/build/buildings-pack-jan2019/OBJ/Building1_Large.obj',
+		);
 
 		await mkdir(path.dirname(runtimeAsset), { recursive: true });
+		await mkdir(path.dirname(runtimeObjAsset), { recursive: true });
 		await mkdir(path.dirname(sourceAsset), { recursive: true });
 		await writeFile(runtimeAsset, 'runtime');
+		await writeFile(runtimeObjAsset, 'runtime obj');
 		await writeFile(sourceAsset, 'source');
 
 		const removedFiles = await prunePublicAssets({ distDir });
 
-		expect(removedFiles).toEqual(['models/build/buildings-pack-jan2019/OBJ/House1.obj']);
+		expect(removedFiles).toEqual(['models/build/buildings-pack-jan2019/OBJ/Building1_Large.obj']);
 		expect(await exists(runtimeAsset)).toBe(true);
+		expect(await exists(runtimeObjAsset)).toBe(true);
 		expect(await exists(sourceAsset)).toBe(false);
 	});
 });

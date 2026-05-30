@@ -59,3 +59,4 @@ Tasks:
 
 Notes:
 - Local production preview requested reported models and textures from `/js-game-tf-lang-run/...` and returned 200/304 instead of root-path 404s.
+- Published Pages smoke test showed building OBJ URLs were now correctly base-prefixed but missing from the deployment artifact; `scripts/prune-public-assets.mjs` now allowlists the runtime OBJ/MTL building assets.
