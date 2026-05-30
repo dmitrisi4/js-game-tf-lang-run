@@ -8,6 +8,7 @@ import type React from 'react';
 import { useEffect } from 'react';
 import { useScene } from 'react-babylonjs';
 
+import { publicAssetUrl } from '@/utils/publicAssetUrl';
 import {
 	getOceanMaterialConfig,
 	getOceanSurfaceMetrics,
@@ -53,7 +54,7 @@ const OceanSurface: React.FC<PropsType> = ({ bounds, name, opacity = 0.82, surfa
 		const materialConfig = getOceanMaterialConfig(metrics.width, metrics.depth);
 
 		material.backFaceCulling = false;
-		material.bumpTexture = new Texture('/textures/waterbump.png', scene);
+		material.bumpTexture = new Texture(publicAssetUrl('/textures/waterbump.png'), scene);
 		material.windForce = materialConfig.windForce;
 		material.windDirection = new Vector2(0.72, 0.28);
 		material.waveHeight = materialConfig.waveHeight;

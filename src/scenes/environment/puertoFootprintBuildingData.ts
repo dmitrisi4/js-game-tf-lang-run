@@ -1,4 +1,5 @@
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { publicAssetUrl } from '@/utils/publicAssetUrl';
 import type { TenerifeRoadTransformType } from './TenerifeGeoRoadLayers';
 import type { WorldPosition } from './worldData';
 
@@ -38,8 +39,9 @@ export type PuertoFootprintBuildingTransformOptionsType = {
 	verticalScaleMultiplier?: number;
 };
 
-export const PUERTO_BUILDING_FOOTPRINTS_RUNTIME_URL =
-	'/data/tenerife/puerto-building-footprints-runtime.json';
+export const PUERTO_BUILDING_FOOTPRINTS_RUNTIME_URL = publicAssetUrl(
+	'/data/tenerife/puerto-building-footprints-runtime.json',
+);
 export const TENERIFE_FULL_ISLAND_FOOTPRINT_BUILDING_HORIZONTAL_SCALE_MULTIPLIER = 0.72;
 export const TENERIFE_FULL_ISLAND_FOOTPRINT_BUILDING_VERTICAL_SCALE_MULTIPLIER = 12;
 

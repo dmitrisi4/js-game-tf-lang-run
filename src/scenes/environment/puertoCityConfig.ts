@@ -1,3 +1,4 @@
+import { publicAssetUrl } from '@/utils/publicAssetUrl';
 import { shouldRenderPuertoOnFullIsland } from './tenerifeFullIslandConfig';
 
 export type PuertoRoadRenderMode = 'baked' | 'both' | 'mesh' | 'none';
@@ -14,12 +15,19 @@ export type PuertoLayerPlanType = {
 	terrainMode: PuertoTerrainMode;
 };
 
-export const PUERTO_CITY_TERRAIN_MODEL_URL =
-	'/models/environment/puerto-de-la-cruz-terrain.glb?v=2026-05-27-roadbed-pbr-pass';
-export const PUERTO_CITY_ALBEDO_TEXTURE_URL = '/textures/tenerife/puerto-city-albedo.png';
-export const PUERTO_CITY_NORMAL_TEXTURE_URL = '/textures/tenerife/puerto-city-normal.png';
-export const PUERTO_CITY_ORM_TEXTURE_URL = '/textures/tenerife/puerto-city-orm.png';
-export const PUERTO_CITY_ROAD_MASK_TEXTURE_URL = '/textures/tenerife/puerto-city-road-mask.png';
+export const PUERTO_CITY_TERRAIN_MODEL_URL = publicAssetUrl(
+	'/models/environment/puerto-de-la-cruz-terrain.glb?v=2026-05-27-roadbed-pbr-pass',
+);
+export const PUERTO_CITY_ALBEDO_TEXTURE_URL = publicAssetUrl(
+	'/textures/tenerife/puerto-city-albedo.png',
+);
+export const PUERTO_CITY_NORMAL_TEXTURE_URL = publicAssetUrl(
+	'/textures/tenerife/puerto-city-normal.png',
+);
+export const PUERTO_CITY_ORM_TEXTURE_URL = publicAssetUrl('/textures/tenerife/puerto-city-orm.png');
+export const PUERTO_CITY_ROAD_MASK_TEXTURE_URL = publicAssetUrl(
+	'/textures/tenerife/puerto-city-road-mask.png',
+);
 
 const isRoadRenderMode = (value: string | null): value is PuertoRoadRenderMode =>
 	value === 'baked' || value === 'both' || value === 'mesh' || value === 'none';

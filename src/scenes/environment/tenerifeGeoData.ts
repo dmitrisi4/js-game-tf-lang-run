@@ -1,3 +1,4 @@
+import { publicAssetUrl } from '@/utils/publicAssetUrl';
 import { measureTenerifeAsyncStep, measureTenerifeSyncStep } from './tenerifePerformance';
 import {
 	buildTenerifeRoadLayerDataFromRuntime,
@@ -12,7 +13,7 @@ export type TenerifeGeoData = {
 	roadsideBuildings: WorldBuilding[];
 };
 
-export const TENERIFE_RUNTIME_ROADS_URL = '/data/tenerife/roads-runtime.json';
+export const TENERIFE_RUNTIME_ROADS_URL = publicAssetUrl('/data/tenerife/roads-runtime.json');
 
 export const loadTenerifeGeoData = async (): Promise<TenerifeGeoData> => {
 	const runtimeRoadData = await measureTenerifeAsyncStep(

@@ -1,4 +1,5 @@
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { publicAssetUrl } from '@/utils/publicAssetUrl';
 
 export type RoofLandingPointType = {
 	id: string;
@@ -16,7 +17,9 @@ export type RoofLandingPayloadType = {
 	version: number;
 };
 
-export const PUERTO_ROOF_LANDINGS_URL = '/data/tenerife/puerto-roof-landings-runtime.json';
+export const PUERTO_ROOF_LANDINGS_URL = publicAssetUrl(
+	'/data/tenerife/puerto-roof-landings-runtime.json',
+);
 export const ROOF_WALL_RAY_LENGTH = 1.65;
 export const ROOF_WALL_RAY_HEIGHT = 0.88;
 export const ROOF_LANDING_MAX_DISTANCE = 44;

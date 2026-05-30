@@ -11,3 +11,7 @@
 ## Phase 3: Validate And Deploy
 - Run local validation.
 - Push to `main` and confirm the GitHub Actions deployment succeeds.
+
+## Phase 4: Fix Public Asset Base Paths
+- Resolve runtime `public/` asset URLs through Vite's configured base path.
+- Validate local production preview and push the Pages asset-path fix.

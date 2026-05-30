@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { publicAssetUrl } from '@/utils/publicAssetUrl';
 import {
 	getPuertoLayerPlan,
 	getPuertoRoadRenderMode,
@@ -85,9 +86,17 @@ describe('puertoCityConfig', () => {
 	});
 
 	it('keeps generated Puerto material map URLs colocated with the terrain atlas', () => {
-		expect(PUERTO_CITY_ALBEDO_TEXTURE_URL).toBe('/textures/tenerife/puerto-city-albedo.png');
-		expect(PUERTO_CITY_ROAD_MASK_TEXTURE_URL).toBe('/textures/tenerife/puerto-city-road-mask.png');
-		expect(PUERTO_CITY_ORM_TEXTURE_URL).toBe('/textures/tenerife/puerto-city-orm.png');
-		expect(PUERTO_CITY_NORMAL_TEXTURE_URL).toBe('/textures/tenerife/puerto-city-normal.png');
+		expect(PUERTO_CITY_ALBEDO_TEXTURE_URL).toBe(
+			publicAssetUrl('/textures/tenerife/puerto-city-albedo.png'),
+		);
+		expect(PUERTO_CITY_ROAD_MASK_TEXTURE_URL).toBe(
+			publicAssetUrl('/textures/tenerife/puerto-city-road-mask.png'),
+		);
+		expect(PUERTO_CITY_ORM_TEXTURE_URL).toBe(
+			publicAssetUrl('/textures/tenerife/puerto-city-orm.png'),
+		);
+		expect(PUERTO_CITY_NORMAL_TEXTURE_URL).toBe(
+			publicAssetUrl('/textures/tenerife/puerto-city-normal.png'),
+		);
 	});
 });

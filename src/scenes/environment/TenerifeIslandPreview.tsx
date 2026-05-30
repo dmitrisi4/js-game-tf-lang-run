@@ -16,14 +16,15 @@ import type React from 'react';
 import { useEffect, useRef } from 'react';
 import { useScene } from 'react-babylonjs';
 import { applyCollisionFilterToAggregate } from '@/scenes/physics/collisionLayers';
+import { publicAssetUrl } from '@/utils/publicAssetUrl';
 import { TENERIFE_CITY_ANCHOR_POSITION } from './tenerifePreviewConfig';
 
-const TENERIFE_MODEL_ROOT_URL = '/models/environment/';
+const TENERIFE_MODEL_ROOT_URL = publicAssetUrl('/models/environment/');
 const TENERIFE_MODEL_FILENAME = 'tenerife-island-location.glb?v=2026-05-13-terrain-winding';
 const TENERIFE_PREVIEW_SCALE = 48;
 const TENERIFE_TERRAIN_MESH_NAME = 'env_tenerife_full_island_terrain_1unit_1km';
 const PUERTO_DE_LA_CRUZ_LOCAL_POSITION = new Vector3(6.25, 0.347, 15.58);
-const TENERIFE_TEXTURE_BASE_PATH = '/textures/Ground068_4K-JPG/Ground068_4K-JPG';
+const TENERIFE_TEXTURE_BASE_PATH = publicAssetUrl('/textures/Ground068_4K-JPG/Ground068_4K-JPG');
 /**
  * UV projection extent in local mesh space. Covers the full island width
  * so UV goes 0→1 across 108 local units (= 5184 world units at scale×48).

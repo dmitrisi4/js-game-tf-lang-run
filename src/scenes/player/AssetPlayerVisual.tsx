@@ -19,6 +19,7 @@ import {
 } from '@/scenes/environment/tenerifeFullIslandConfig';
 import { getTenerifeFullIslandHeightAtPosition } from '@/scenes/environment/tenerifeFullIslandHeightfield';
 import { isTenerifeRoadVisualSupportMeshName } from '@/scenes/environment/tenerifeRoadMeshNames';
+import { publicAssetUrl } from '@/utils/publicAssetUrl';
 import { resolvePlayerAnimationState, selectPlayerAnimationGroup } from './playerAnimationRegistry';
 import { isRoofParkourBuildingMeshName } from './roofParkourController';
 import { getPlayerWaterState } from './waterInteraction';
@@ -29,7 +30,9 @@ import {
 	type WaterMovementWakeType,
 } from './waterMovementWaves';
 
-const PLAYER_MODEL_ROOT_URL = '/models/hero/pumkinboy-rigged-animated-character/source/';
+const PLAYER_MODEL_ROOT_URL = publicAssetUrl(
+	'/models/hero/pumkinboy-rigged-animated-character/source/',
+);
 const PLAYER_MODEL_FILENAME = 'Pumpkinboy_10Animations.glb';
 const PLAYER_MODEL_TARGET_HEIGHT = 1.72;
 const PLAYER_MODEL_FORWARD_OFFSET = 0;

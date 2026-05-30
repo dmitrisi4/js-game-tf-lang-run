@@ -1,4 +1,5 @@
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { publicAssetUrl } from '@/utils/publicAssetUrl';
 import { TENERIFE_FULL_ISLAND_MAP_DATA } from './tenerifeFullIslandMapData';
 
 export type TenerifeFullIslandPuertoOverlayTransformType = {
@@ -18,8 +19,9 @@ type GeoBoundsType = {
 	west: number;
 };
 
-export const TENERIFE_FULL_ISLAND_MODEL_URL =
-	'/models/environment/tenerife-full-island-normalized.glb?v=2026-05-19-restored-full';
+export const TENERIFE_FULL_ISLAND_MODEL_URL = publicAssetUrl(
+	'/models/environment/tenerife-full-island-normalized.glb?v=2026-05-19-restored-full',
+);
 export const TENERIFE_FULL_ISLAND_TERRAIN_PREFIX = 'tenerife-full-island-terrain-tile-';
 export const TENERIFE_FULL_ISLAND_RUNTIME_SCALE = 0.02;
 export const TENERIFE_FULL_ISLAND_WATER_SURFACE_Y = -3.75;

@@ -12,6 +12,7 @@ import '@babylonjs/loaders/OBJ';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useScene } from 'react-babylonjs';
+import { publicAssetUrl } from '@/utils/publicAssetUrl';
 import { finishTenerifePerfTimer, startTenerifePerfTimer } from './tenerifePerformance';
 import { getTerrainHeightAt } from './terrainData';
 import type { WorldBuilding, WorldBuildingModelId, WorldPosition } from './worldData';
@@ -29,7 +30,7 @@ type PropsType = {
 
 type GroundHeightProviderType = (position: WorldPosition) => number | null;
 
-const BUILDING_MODEL_ROOT_URL = '/models/build/buildings-pack-jan2019/OBJ/';
+const BUILDING_MODEL_ROOT_URL = publicAssetUrl('/models/build/buildings-pack-jan2019/OBJ/');
 const BUILDING_MODEL_FILENAMES: Record<WorldBuildingModelId, string> = {
 	'building-1-small': 'Building1_Small.obj',
 	'building-2-small': 'Building2_Small.obj',

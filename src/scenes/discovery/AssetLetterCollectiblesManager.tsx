@@ -8,10 +8,11 @@ import '@babylonjs/loaders/glTF';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useBeforeRender, useScene } from 'react-babylonjs';
+import { publicAssetUrl } from '@/utils/publicAssetUrl';
 import type { CollectibleSpawnPoint } from './collectibleTypes';
 import LetterCollectible from './LetterCollectible';
 
-const COLLECTIBLE_MODEL_ROOT_URL = '/models/collectibles/';
+const COLLECTIBLE_MODEL_ROOT_URL = publicAssetUrl('/models/collectibles/');
 const COLLECTIBLE_MODEL_FILENAME = 'collectible-letter-crystal.glb';
 const COLLECTIBLE_MODEL_URL = `${COLLECTIBLE_MODEL_ROOT_URL}${COLLECTIBLE_MODEL_FILENAME}`;
 const COLLECTIBLE_MODEL_SCALE = 0.65;

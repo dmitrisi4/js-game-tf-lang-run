@@ -12,6 +12,7 @@ import type React from 'react';
 import { useEffect } from 'react';
 import { useScene } from 'react-babylonjs';
 import { applyCollisionFilterToAggregate } from '@/scenes/physics/collisionLayers';
+import { publicAssetUrl } from '@/utils/publicAssetUrl';
 import { getTerrainHeightAt, getTerrainMaterialAt, TERRAIN_SUBDIVISIONS } from './terrainData';
 import { WORLD_SIZE } from './worldData';
 import type { TerrainMaterialKey } from './worldZones';
@@ -28,7 +29,7 @@ const TERRAIN_COLORS: Record<TerrainMaterialKey, Color4> = {
 	ash: Color4.FromColor3(Color3.FromHexString('#5d584c'), 1),
 };
 
-const TERRAIN_TEXTURE_BASE_PATH = '/textures/Ground068_4K-JPG/Ground068_4K-JPG';
+const TERRAIN_TEXTURE_BASE_PATH = publicAssetUrl('/textures/Ground068_4K-JPG/Ground068_4K-JPG');
 
 /** Macro tiling — large-scale pattern visible from distance. */
 const TERRAIN_TEXTURE_REPEAT_MACRO = 6;

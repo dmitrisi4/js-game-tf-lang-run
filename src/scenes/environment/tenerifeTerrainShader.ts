@@ -3,10 +3,11 @@ import { ShaderMaterial } from '@babylonjs/core/Materials/shaderMaterial';
 import { Texture } from '@babylonjs/core/Materials/Textures/texture';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 import type { Scene } from '@babylonjs/core/scene';
+import { publicAssetUrl } from '@/utils/publicAssetUrl';
 
 const SHADER_NAME = 'tenerifeTerrainSplat';
 
-const TEXTURE_BASE = '/textures/Ground068_4K-JPG/Ground068_4K-JPG';
+const TEXTURE_BASE = publicAssetUrl('/textures/Ground068_4K-JPG/Ground068_4K-JPG');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Vertex shader — passes world-space position and normal to the fragment stage

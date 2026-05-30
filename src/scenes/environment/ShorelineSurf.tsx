@@ -10,6 +10,7 @@ import type { Scene as BabylonScene } from '@babylonjs/core/scene';
 import type React from 'react';
 import { useEffect } from 'react';
 import { useScene } from 'react-babylonjs';
+import { publicAssetUrl } from '@/utils/publicAssetUrl';
 import { getShorelineSurfConfig, type OceanBoundsType } from './oceanVisualConfig';
 import { isTenerifeFullIslandTerrainMeshName } from './tenerifeFullIslandConfig';
 
@@ -20,6 +21,7 @@ const SHORELINE_SURF_Y_OFFSET = 0.065;
 const SHORELINE_SURF_REBUILD_FRAME_LIMIT = 180;
 const SHORELINE_SURF_MIN_POINTS = 24;
 const SHORELINE_SURF_MAX_SEGMENT_MULTIPLIER = 2.2;
+const SHORELINE_PATH_URL = publicAssetUrl('/data/shoreline-path.json');
 
 type PropsType = {
 	bounds: OceanBoundsType;
@@ -60,7 +62,7 @@ export const fetchPrecalculatedShoreline = async (
 	yOffset: number,
 ): Promise<ShorelinePointType[]> => {
 	try {
-		const response = await fetch('/data/shoreline-path.json');
+		const response = await fetch(SHORELINE_PATH_URL);
 		if (!response.ok) {
 			return [];
 		}
