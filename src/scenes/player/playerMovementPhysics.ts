@@ -1,5 +1,24 @@
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 
+export type PlayerGroundedStateInputType = {
+	distance: number | null;
+	enterDistance: number;
+	floorLike: boolean;
+	landingDistance: number;
+	lastJumpFiredAt: number | null;
+	now: number;
+	postJumpSuppressionMs: number;
+	stayDistance: number;
+	verticalVelocity: number;
+	wasGrounded: boolean;
+};
+
+export type PlayerGroundedStateType = {
+	distanceThreshold: number;
+	isGrounded: boolean;
+	isWithinPostJumpSuppression: boolean;
+};
+
 /**
  * Projects a movement direction vector onto a surface plane defined by its normal.
  * When the normal is straight up (flat ground) the result is identical to the input.
@@ -52,4 +71,42 @@ export const lerpVelocityXZ = (
 		0,
 		current.z + (target.z - current.z) * factor,
 	);
+};
+
+/**
+ * Resolves whether the player capsule should be treated as grounded from the
+ * current down-ray hit and previous grounded state.
+ *
+ * The landing threshold is intentionally looser than the first grounded-entry
+ * threshold, but only while descending. This keeps a moving jump from staying in
+ * airborne animation because of small post-landing capsule bounces, without
+ * cancelling the upward jump impulse while the player is still rising.
+ */
+export const resolvePlayerGroundedState = ({
+	distance,
+	enterDistance,
+	floorLike,
+	landingDistance,
+	lastJumpFiredAt,
+	now,
+	postJumpSuppressionMs,
+	stayDistance,
+	verticalVelocity,
+	wasGrounded,
+}: PlayerGroundedStateInputType): PlayerGroundedStateType => {
+	const isWithinPostJumpSuppression =
+		lastJumpFiredAt !== null && now - lastJumpFiredAt < postJumpSuppressionMs;
+	const isDescendingOrLevel = verticalVelocity <= 0;
+	const distanceThreshold = wasGrounded
+		? stayDistance
+		: isDescendingOrLevel
+			? landingDistance
+			: enterDistance;
+
+	return {
+		distanceThreshold,
+		isGrounded:
+			!isWithinPostJumpSuppression && floorLike && distance !== null && distance <= distanceThreshold,
+		isWithinPostJumpSuppression,
+	};
 };

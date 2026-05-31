@@ -26,9 +26,18 @@
 - [x] Add `PLAYER_AIR_CONTROL = 0.35` constant
 - [x] Scale movement direction by `PLAYER_AIR_CONTROL` when airborne
 
+## Phase 6 — Run Jump Landing Recovery
+- [x] Add grounded hysteresis for landing after moving jumps
+- [x] Keep jump impulse from being cancelled by same-frame ground detection
+- [x] Preserve XZ jump momentum without depending on stop/sprint input
+- [x] Add focused tests for run+jump animation recovery decision flow
+
 ## Validation
-- [x] `bun run test` — 179/179 passed
+- [x] `bun run test src/scenes/player/playerMovementPhysics.test.ts` — 14/14 passed
+- [x] `bun run test` — 184/184 passed
 - [x] `bun run check` — 0 errors
 - [x] `bun run build` — clean build
+- [x] Local dev HTTP smoke — app shell and Pumpkinboy GLB return 200 on Vite server
 - [x] Write session log `docs/history/logs/2026-05-30.md`
-- [ ] Git commit
+- [x] Write session log `docs/history/logs/2026-05-31.md`
+- [x] Git commit

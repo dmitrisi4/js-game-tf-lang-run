@@ -26,3 +26,11 @@ Depends on Phase 1+2 (slope and ground checks must be correct first).
 Multiply `movementDirection` by `AIR_CONTROL` factor when `isAirborne`.
 Depends on Phase 3 (jump must fire before testing air behavior).
 **Gate**: player cannot fully redirect mid-air, slight correction still possible.
+
+### Phase 6 — Run Jump Landing Recovery
+Stabilize grounded re-entry after a moving jump so the visual animation leaves the
+one-shot jump/free-fall pose without requiring the player to stop or sprint.
+Depends on phases 2, 4, and 5 because the bug appears through grounded distance,
+horizontal inertia, and air-control state.
+**Gate**: hold run, press jump, keep holding run after landing; walk/run
+animation resumes on landing without an input toggle.

@@ -26,7 +26,11 @@ import {
 	PLAYER_CAPSULE_DIAMETER,
 	PLAYER_CAPSULE_HEIGHT,
 } from './playerCapsuleMetrics';
-import { lerpVelocityXZ, projectOntoSurface } from './playerMovementPhysics';
+import {
+	lerpVelocityXZ,
+	projectOntoSurface,
+	resolvePlayerGroundedState,
+} from './playerMovementPhysics';
 import {
 	isFloorLikeNormal,
 	isPlayerGroundMeshName,
@@ -70,9 +74,17 @@ const PLAYER_JUMP_VELOCITY = 6.5;
 /** Phase 3: reduced from 310 ms — jump fires within one render frame of press. */
 const PLAYER_JUMP_PHYSICS_DELAY_MS = 80;
 const PLAYER_JUMP_QUEUE_EXPIRE_MS = 180;
-const PLAYER_GROUND_RAY_LENGTH = 1.28;
-/** Phase 2: distance-based grounded guard; replaces the rigid vertical-speed cap. */
+const PLAYER_GROUND_RAY_LENGTH = 1.8;
+/**
+ * Phase 2: distance-based grounded guard.
+ * Two thresholds implement hysteresis:
+ * - PLAYER_GROUND_MAX_DISTANCE (tight) — must be this close to ENTER grounded state.
+ * - PLAYER_GROUND_STAY_DISTANCE (loose) — allowed to drift this far and STAY grounded.
+ * The loose threshold absorbs micro-bouncing from the capsule's rounded bottom when
+ * horizontal XZ velocity is high; without it isAirborne oscillates after landing.
+ */
 const PLAYER_GROUND_MAX_DISTANCE = 1.35;
+const PLAYER_GROUND_STAY_DISTANCE = 1.65;
 const TENERIFE_FULL_ISLAND_SUPPORT_RAY_HEIGHT = 80;
 const TENERIFE_FULL_ISLAND_SUPPORT_RAY_LENGTH = 180;
 const PLAYER_MAX_FALL_SPEED = -18;
@@ -81,6 +93,12 @@ const PLAYER_MOVE_ACCELERATION = 18;
 const PLAYER_STOP_DECELERATION = 24;
 /** Phase 5: fraction of full ground control available while airborne (0–1). */
 const PLAYER_AIR_CONTROL = 0.35;
+/**
+ * How long after a jump the grounded-ray check is suppressed.
+ * Prevents the capsule from being detected as still-on-ground the very next
+ * frame after the jump impulse fires, which would immediately freeze Y.
+ */
+const PLAYER_POST_JUMP_COYOTE_MS = 200;
 const PLAYER_SPAWN_POSITION = new Vector3(-7, 1.5, -6);
 const PLAYER_PHYSICS_OPTIONS = {
 	mass: 1,
@@ -289,6 +307,19 @@ const Player: React.FC<PropsType> = ({
 	const facingYawRef = useRef(0);
 	const previousJumpCommandRef = useRef(false);
 	const pendingJumpPhysicsAtRef = useRef<number | null>(null);
+	/**
+	 * Timestamp (performance.now) when the most recent jump impulse fired.
+	 * Used to suppress the grounded-ray for PLAYER_POST_JUMP_COYOTE_MS so that
+	 * the capsule cannot be re-grounded one frame after launch, which froze Y.
+	 */
+	const lastJumpFiredAtRef = useRef<number | null>(null);
+	/**
+	 * Hysteresis flag: true when the player was considered grounded last frame.
+	 * Switches between PLAYER_GROUND_MAX_DISTANCE (to enter grounded) and
+	 * PLAYER_GROUND_STAY_DISTANCE (to stay grounded) so micro-bounces from
+	 * horizontal movement do not flip isAirborne on each stride.
+	 */
+	const wasGroundedRef = useRef(false);
 	/** Phase 4: tracks the last lerped XZ velocity so inertia is continuous across frames. */
 	const smoothedHorizontalVelocityRef = useRef(Vector3.Zero());
 	const roofLandingsRef = useRef<RoofLandingPointType[]>([]);
@@ -472,17 +503,22 @@ const Player: React.FC<PropsType> = ({
 				(mesh) => isPlayerGroundMeshName(mesh.name) && mesh.isEnabled() && mesh.isPickable,
 			);
 			const groundNormal = groundHit?.getNormal(true, false) ?? null;
-			/**
-			 * Phase 2: use ray hit distance instead of vertical speed to determine grounded.
-			 * The old speed cap (0.45 m/s) falsely triggered "airborne" on downhill slopes.
-			 * Distance check is stable regardless of descent velocity.
-			 */
-			const isGrounded =
-				Boolean(groundHit?.hit) &&
-				isFloorLikeNormal(groundNormal) &&
-				(groundHit?.distance ?? Number.MAX_VALUE) <= PLAYER_GROUND_MAX_DISTANCE;
-
 			const now = performance.now();
+			const groundedState = resolvePlayerGroundedState({
+				distance: groundHit?.hit ? (groundHit.distance ?? null) : null,
+				enterDistance: PLAYER_GROUND_MAX_DISTANCE,
+				floorLike: isFloorLikeNormal(groundNormal),
+				landingDistance: PLAYER_GROUND_STAY_DISTANCE,
+				lastJumpFiredAt: lastJumpFiredAtRef.current,
+				now,
+				postJumpSuppressionMs: PLAYER_POST_JUMP_COYOTE_MS,
+				stayDistance: PLAYER_GROUND_STAY_DISTANCE,
+				verticalVelocity: currentVerticalVelocity,
+				wasGrounded: wasGroundedRef.current,
+			});
+			const isGrounded = groundedState.isGrounded;
+			wasGroundedRef.current = isGrounded;
+
 			const pendingJumpPhysicsAt = pendingJumpPhysicsAtRef.current;
 			const shouldTriggerJump =
 				pendingJumpPhysicsAt !== null && now >= pendingJumpPhysicsAt && isGrounded;
@@ -543,6 +579,7 @@ const Player: React.FC<PropsType> = ({
 
 			if (shouldTriggerJump) {
 				pendingJumpPhysicsAtRef.current = null;
+				lastJumpFiredAtRef.current = now;
 			} else if (
 				pendingJumpPhysicsAt !== null &&
 				now >= pendingJumpPhysicsAt + PLAYER_JUMP_QUEUE_EXPIRE_MS
@@ -566,39 +603,68 @@ const Player: React.FC<PropsType> = ({
 					: movementDirection;
 
 			/**
-			 * Phase 5: reduce air control to a fraction of ground control so the player
-			 * cannot fully reverse direction mid-flight.
+			 * Keep target speed based on input. Airborne steering is limited by reducing
+			 * acceleration, and deceleration is disabled while airborne to preserve jump
+			 * momentum if the player releases movement mid-air.
 			 */
-			const controlledDirection = nextIsAirborne
-				? slopeAdjustedDirection.scale(PLAYER_AIR_CONTROL)
-				: slopeAdjustedDirection;
-
-			/** Target XZ velocity this frame (zero when no input). */
 			const targetXZ = new Vector3(
-				controlledDirection.x * nextMoveSpeed,
+				slopeAdjustedDirection.x * nextMoveSpeed,
 				0,
-				controlledDirection.z * nextMoveSpeed,
+				slopeAdjustedDirection.z * nextMoveSpeed,
 			);
 
-			/**
-			 * Phase 4: lerp toward the target XZ velocity using exponential decay so
-			 * movement has perceptible acceleration and deceleration.
-			 */
+			const currentAcceleration = nextIsAirborne
+				? PLAYER_MOVE_ACCELERATION * PLAYER_AIR_CONTROL
+				: PLAYER_MOVE_ACCELERATION;
+
+			const currentDeceleration = nextIsAirborne ? 0 : PLAYER_STOP_DECELERATION;
+
 			smoothedHorizontalVelocityRef.current = lerpVelocityXZ(
 				smoothedHorizontalVelocityRef.current,
 				targetXZ,
-				PLAYER_MOVE_ACCELERATION,
-				PLAYER_STOP_DECELERATION,
+				currentAcceleration,
+				currentDeceleration,
 				deltaSeconds,
 			);
 
-			physicsBody.setLinearVelocity(
-				new Vector3(
-					smoothedHorizontalVelocityRef.current.x,
-					shouldTriggerJump ? PLAYER_JUMP_VELOCITY : nextVerticalVelocity,
-					smoothedHorizontalVelocityRef.current.z,
-				),
-			);
+			if (shouldTriggerJump) {
+				/**
+				 * Jump frame: set full velocity including the upward impulse.
+				 * After this we let Havok gravity drive Y on its own.
+				 */
+				physicsBody.setLinearVelocity(
+					new Vector3(
+						smoothedHorizontalVelocityRef.current.x,
+						PLAYER_JUMP_VELOCITY,
+						smoothedHorizontalVelocityRef.current.z,
+					),
+				);
+			} else if (nextIsAirborne) {
+				/**
+				 * Mid-air: only update XZ. Let Havok integrate gravity on Y naturally.
+				 * We only clamp Y to prevent infinite fall speed.
+				 */
+				const clampedY = Math.max(currentVerticalVelocity, PLAYER_MAX_FALL_SPEED);
+				physicsBody.setLinearVelocity(
+					new Vector3(
+						smoothedHorizontalVelocityRef.current.x,
+						clampedY,
+						smoothedHorizontalVelocityRef.current.z,
+					),
+				);
+			} else {
+				/**
+				 * On the ground: write full XZ + preserve Y from physics
+				 * (lets the capsule stay pressed against slopes without fighting gravity).
+				 */
+				physicsBody.setLinearVelocity(
+					new Vector3(
+						smoothedHorizontalVelocityRef.current.x,
+						nextVerticalVelocity,
+						smoothedHorizontalVelocityRef.current.z,
+					),
+				);
+			}
 
 			if (isMovingRef.current !== nextIsMoving) {
 				isMovingRef.current = nextIsMoving;

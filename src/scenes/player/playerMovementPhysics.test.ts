@@ -1,6 +1,10 @@
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { describe, expect, it } from 'vitest';
-import { lerpVelocityXZ, projectOntoSurface } from './playerMovementPhysics';
+import {
+	lerpVelocityXZ,
+	projectOntoSurface,
+	resolvePlayerGroundedState,
+} from './playerMovementPhysics';
 
 // ---------------------------------------------------------------------------
 // projectOntoSurface
@@ -116,5 +120,81 @@ describe('lerpVelocityXZ', () => {
 		currentB = lerpVelocityXZ(currentB, target, ACCEL, DECEL, DELTA / 2);
 
 		expect(currentB.x).toBeCloseTo(resultOneFrame.x, 4);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// resolvePlayerGroundedState
+// ---------------------------------------------------------------------------
+
+describe('resolvePlayerGroundedState', () => {
+	const BASE_INPUT = {
+		distance: 1.04,
+		enterDistance: 1.35,
+		floorLike: true,
+		landingDistance: 1.65,
+		lastJumpFiredAt: null,
+		now: 1000,
+		postJumpSuppressionMs: 200,
+		stayDistance: 1.65,
+		verticalVelocity: 0,
+		wasGrounded: false,
+	};
+
+	it('suppresses ground re-entry during the immediate post-jump window', () => {
+		const result = resolvePlayerGroundedState({
+			...BASE_INPUT,
+			lastJumpFiredAt: 900,
+			now: 1000,
+		});
+
+		expect(result.isWithinPostJumpSuppression).toBe(true);
+		expect(result.isGrounded).toBe(false);
+	});
+
+	it('uses the tight entry threshold while rising', () => {
+		const result = resolvePlayerGroundedState({
+			...BASE_INPUT,
+			distance: 1.5,
+			verticalVelocity: 2.5,
+		});
+
+		expect(result.distanceThreshold).toBe(1.35);
+		expect(result.isGrounded).toBe(false);
+	});
+
+	it('uses the loose landing threshold while descending after a moving jump', () => {
+		const result = resolvePlayerGroundedState({
+			...BASE_INPUT,
+			distance: 1.5,
+			lastJumpFiredAt: 700,
+			now: 1000,
+			verticalVelocity: -1.2,
+			wasGrounded: false,
+		});
+
+		expect(result.distanceThreshold).toBe(1.65);
+		expect(result.isGrounded).toBe(true);
+	});
+
+	it('keeps the loose stay-grounded threshold after landing', () => {
+		const result = resolvePlayerGroundedState({
+			...BASE_INPUT,
+			distance: 1.55,
+			verticalVelocity: 0.4,
+			wasGrounded: true,
+		});
+
+		expect(result.distanceThreshold).toBe(1.65);
+		expect(result.isGrounded).toBe(true);
+	});
+
+	it('rejects non-floor hits even when distance is close', () => {
+		const result = resolvePlayerGroundedState({
+			...BASE_INPUT,
+			floorLike: false,
+		});
+
+		expect(result.isGrounded).toBe(false);
 	});
 });

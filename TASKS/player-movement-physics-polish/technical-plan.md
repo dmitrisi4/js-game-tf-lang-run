@@ -30,6 +30,15 @@
 - New constant: `PLAYER_AIR_CONTROL = 0.35`.
 - When `isGrounded` is false (and not `shouldTriggerJump`), scale `movementDirection` by `PLAYER_AIR_CONTROL` before feeding into the lerp.
 
+**Phase 6 — Run jump landing recovery**
+- Add grounded hysteresis so the capsule can stay grounded through small
+  horizontal-speed bounces after landing.
+- Suppress grounded re-entry only for a short post-jump window so the jump impulse
+  cannot be cancelled by the same near-ground ray, then allow landing detection to
+  recover while run input is still held.
+- Keep XZ air control as reduced acceleration instead of shrinking target speed,
+  preserving jump momentum without making landing dependent on stop/sprint input.
+
 ### [NEW] playerMovementPhysics.ts
 `src/scenes/player/playerMovementPhysics.ts`
 
@@ -64,6 +73,9 @@ inputCommands
 - **Inertia during water**: water mode uses full-island kinematic path, not the physics body path. No conflict.
 - **Jump + inertia**: at jump frame, XZ inertia lerp still applies. This is desirable — player keeps momentum through jump.
 - **Parkour suppression**: `parkourResult.suppressMovement` early-returns before velocity is set — no conflict.
+- **Animation stuck in jump pose**: imported Pumpkinboy has no dedicated falling
+  or landing clip. The visual depends on `isAirborne` returning to false, so
+  grounded recovery must be stable while run input remains unchanged.
 
 ## Verification Commands
 
@@ -74,3 +86,5 @@ bun run check
 ```
 
 Manual browser: run down a ramp, jump while running, sprint-stop, try mid-air turn.
+Regression browser: hold run, press jump, keep holding run after landing, confirm
+the visual leaves the free-fall pose without releasing movement.
