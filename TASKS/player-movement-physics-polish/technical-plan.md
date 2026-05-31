@@ -39,6 +39,15 @@
 - Keep XZ air control as reduced acceleration instead of shrinking target speed,
   preserving jump momentum without making landing dependent on stop/sprint input.
 
+**Phase 7 — Jump clip completion recovery**
+- Track the active high-level animation state in `AssetPlayerVisual`.
+- When the non-looping jump animation group ends, request a one-time animation
+  effect rerun if the latest flags say the player is not airborne.
+- Keep jump frozen while genuinely airborne; recovery should only run once the
+  controller reports grounded/no-airborne.
+- Unit-test the pure recovery predicate so the visual-only stuck case is covered
+  outside Babylon runtime.
+
 ### [NEW] playerMovementPhysics.ts
 `src/scenes/player/playerMovementPhysics.ts`
 
@@ -75,7 +84,9 @@ inputCommands
 - **Parkour suppression**: `parkourResult.suppressMovement` early-returns before velocity is set — no conflict.
 - **Animation stuck in jump pose**: imported Pumpkinboy has no dedicated falling
   or landing clip. The visual depends on `isAirborne` returning to false, so
-  grounded recovery must be stable while run input remains unchanged.
+  grounded recovery must be stable while run input remains unchanged. The
+  animation layer also needs a completion callback for the case where the jump
+  one-shot ends while `isAirborne` is already false and no prop changes occur.
 
 ## Verification Commands
 

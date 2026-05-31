@@ -32,9 +32,16 @@
 - [x] Preserve XZ jump momentum without depending on stop/sprint input
 - [x] Add focused tests for run+jump animation recovery decision flow
 
+## Phase 7 — Jump Clip Completion Recovery
+- [x] Track active animation state in `AssetPlayerVisual`
+- [x] Recover from completed one-shot jump clip when latest flags are grounded
+- [x] Keep completed jump pose while truly airborne until landing changes props
+- [x] Add focused tests for visual-only jump completion recovery
+
 ## Validation
 - [x] `bun run test src/scenes/player/playerMovementPhysics.test.ts` — 14/14 passed
-- [x] `bun run test` — 184/184 passed
+- [x] `bun run test src/scenes/player/playerAnimationRegistry.test.ts src/scenes/player/playerMovementPhysics.test.ts` — 19/19 passed
+- [x] `bun run test` — 185/185 passed
 - [x] `bun run check` — 0 errors
 - [x] `bun run build` — clean build
 - [x] Local dev HTTP smoke — app shell and Pumpkinboy GLB return 200 on Vite server

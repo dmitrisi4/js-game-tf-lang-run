@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { resolvePlayerAnimationState, selectPlayerAnimationGroup } from './playerAnimationRegistry';
+import {
+	resolvePlayerAnimationState,
+	selectPlayerAnimationGroup,
+	shouldRecoverFromCompletedJumpAnimation,
+} from './playerAnimationRegistry';
 
 const animationGroups = [
 	{ name: 'Idle_Loop' },
@@ -72,5 +76,29 @@ describe('playerAnimationRegistry', () => {
 
 		expect(selectPlayerAnimationGroup(unknownGroups, 'idle')?.name).toBe('Clip_A');
 		expect(selectPlayerAnimationGroup([], 'idle')).toBeNull();
+	});
+
+	it('recovers from a completed one-shot jump when already grounded', () => {
+		expect(
+			shouldRecoverFromCompletedJumpAnimation({
+				activeState: 'jump',
+				completedState: 'jump',
+				isAirborne: false,
+			}),
+		).toBe(true);
+		expect(
+			shouldRecoverFromCompletedJumpAnimation({
+				activeState: 'jump',
+				completedState: 'jump',
+				isAirborne: true,
+			}),
+		).toBe(false);
+		expect(
+			shouldRecoverFromCompletedJumpAnimation({
+				activeState: 'walk',
+				completedState: 'jump',
+				isAirborne: false,
+			}),
+		).toBe(false);
 	});
 });

@@ -34,3 +34,11 @@ Depends on phases 2, 4, and 5 because the bug appears through grounded distance,
 horizontal inertia, and air-control state.
 **Gate**: hold run, press jump, keep holding run after landing; walk/run
 animation resumes on landing without an input toggle.
+
+### Phase 7 — Jump Clip Completion Recovery
+Handle the visual-only case where the non-looping imported jump clip ends while
+`isAirborne` is already false and locomotion flags have not changed.
+Depends on Phase 6 because grounded state still needs to be correct when a real
+physics jump lands.
+**Gate**: while holding walk/run, a completed one-shot jump clip automatically
+returns to walk/run without requiring stop or sprint.

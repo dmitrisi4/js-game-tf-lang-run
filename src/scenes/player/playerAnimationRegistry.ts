@@ -12,6 +12,12 @@ export type PlayerAnimationStateInputType = {
 	useImportedLocomotionAnimation: boolean;
 };
 
+export type PlayerAnimationCompletionInputType = {
+	activeState: PlayerAnimationStateType | null;
+	completedState: PlayerAnimationStateType;
+	isAirborne: boolean;
+};
+
 const PLAYER_ANIMATION_PATTERNS: Record<PlayerAnimationStateType, string[]> = {
 	idle: ['idle'],
 	jump: ['jump'],
@@ -41,6 +47,14 @@ export const resolvePlayerAnimationState = ({
 
 	return 'idle';
 };
+
+/** Returns whether a completed one-shot jump should force a locomotion recovery pass. */
+export const shouldRecoverFromCompletedJumpAnimation = ({
+	activeState,
+	completedState,
+	isAirborne,
+}: PlayerAnimationCompletionInputType): boolean =>
+	activeState === 'jump' && completedState === 'jump' && !isAirborne;
 
 /** Selects the best imported animation group for a player animation state. */
 export const selectPlayerAnimationGroup = <AnimationGroupType extends PlayerAnimationGroupLikeType>(

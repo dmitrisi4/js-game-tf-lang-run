@@ -10,7 +10,7 @@ import type { Observer } from '@babylonjs/core/Misc/observable';
 import type { Scene as BabylonScene } from '@babylonjs/core/scene';
 import '@babylonjs/loaders/glTF';
 import type React from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useBeforeRender, useScene } from 'react-babylonjs';
 import {
 	isTenerifeFullIslandMode,
@@ -20,7 +20,12 @@ import {
 import { getTenerifeFullIslandHeightAtPosition } from '@/scenes/environment/tenerifeFullIslandHeightfield';
 import { isTenerifeRoadVisualSupportMeshName } from '@/scenes/environment/tenerifeRoadMeshNames';
 import { publicAssetUrl } from '@/utils/publicAssetUrl';
-import { resolvePlayerAnimationState, selectPlayerAnimationGroup } from './playerAnimationRegistry';
+import {
+	type PlayerAnimationStateType,
+	resolvePlayerAnimationState,
+	selectPlayerAnimationGroup,
+	shouldRecoverFromCompletedJumpAnimation,
+} from './playerAnimationRegistry';
 import { isRoofParkourBuildingMeshName } from './roofParkourController';
 import { getPlayerWaterState } from './waterInteraction';
 import { createPlayerWaterLine, type PlayerWaterLineType } from './waterLineEffect';
@@ -249,16 +254,33 @@ const AssetPlayerVisual: React.FC<PropsType> = ({
 	const importedTransformNodesRef = useRef<TransformNode[]>([]);
 	const animationGroupsRef = useRef<AnimationGroup[]>([]);
 	const activeAnimationNameRef = useRef<string | null>(null);
+	const activeAnimationStateRef = useRef<PlayerAnimationStateType | null>(null);
+	const jumpAnimationEndGroupRef = useRef<AnimationGroup | null>(null);
+	const jumpAnimationEndObserverRef = useRef<Observer<AnimationGroup> | null>(null);
 	const lastJumpAnimationRequestIdRef = useRef(0);
 	const fallbackMeshRef = useRef<Mesh | null>(null);
 	const isInWaterRef = useRef(isInWater);
 	const isMovingRef = useRef(isMoving);
+	const latestAnimationFlagsRef = useRef({ isAirborne, isMoving, isSprinting });
 	const waterLineRef = useRef<PlayerWaterLineType | null>(null);
 	const waterWakeRef = useRef<WaterMovementWakeType | null>(null);
 	const idleRippleIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+	const [jumpPlaybackEndRevision, setJumpPlaybackEndRevision] = useState(0);
 
 	isInWaterRef.current = isInWater;
 	isMovingRef.current = isMoving;
+	latestAnimationFlagsRef.current = { isAirborne, isMoving, isSprinting };
+
+	const clearJumpAnimationEndObserver = useCallback((): void => {
+		if (jumpAnimationEndObserverRef.current && jumpAnimationEndGroupRef.current) {
+			jumpAnimationEndGroupRef.current.onAnimationGroupEndObservable.remove(
+				jumpAnimationEndObserverRef.current,
+			);
+		}
+
+		jumpAnimationEndGroupRef.current = null;
+		jumpAnimationEndObserverRef.current = null;
+	}, []);
 
 	useBeforeRender(() => {
 		if (status !== 'error' || !targetMesh || !fallbackMeshRef.current) {
@@ -292,6 +314,7 @@ const AssetPlayerVisual: React.FC<PropsType> = ({
 			waterLineRef.current = null;
 			waterWakeRef.current?.dispose();
 			waterWakeRef.current = null;
+			clearJumpAnimationEndObserver();
 
 			for (const mesh of importedMeshesRef.current) {
 				if (!mesh.isDisposed()) {
@@ -329,6 +352,7 @@ const AssetPlayerVisual: React.FC<PropsType> = ({
 			importedTransformNodesRef.current = [];
 			animationGroupsRef.current = [];
 			activeAnimationNameRef.current = null;
+			activeAnimationStateRef.current = null;
 			lastJumpAnimationRequestIdRef.current = 0;
 			anchorRef.current = null;
 			orientationRootRef.current = null;
@@ -451,7 +475,7 @@ const AssetPlayerVisual: React.FC<PropsType> = ({
 			isDisposed = true;
 			disposeImportedResources();
 		};
-	}, [facingYawRef, scene, targetMesh]);
+	}, [clearJumpAnimationEndObserver, facingYawRef, scene, targetMesh]);
 
 	/**
 	 * Manages water surface effects lifecycle: creates waterline disc and wake system
@@ -508,6 +532,9 @@ const AssetPlayerVisual: React.FC<PropsType> = ({
 	}, [isInWater, isMoving, scene, targetMesh]);
 
 	useEffect(() => {
+		// This value is a rerun signal from the jump-end observer.
+		void jumpPlaybackEndRevision;
+
 		if (status !== 'ready') {
 			return;
 		}
@@ -538,6 +565,7 @@ const AssetPlayerVisual: React.FC<PropsType> = ({
 		}
 
 		lastJumpAnimationRequestIdRef.current = jumpAnimationRequestId;
+		clearJumpAnimationEndObserver();
 
 		for (const animationGroup of animationGroups) {
 			animationGroup.stop();
@@ -545,7 +573,45 @@ const AssetPlayerVisual: React.FC<PropsType> = ({
 
 		targetAnimation.start(!shouldPlayJumpAnimation);
 		activeAnimationNameRef.current = targetAnimation.name;
-	}, [isAirborne, isMoving, isSprinting, jumpAnimationRequestId, status]);
+		activeAnimationStateRef.current = targetState;
+
+		if (shouldPlayJumpAnimation) {
+			let observer: Observer<AnimationGroup> | null = null;
+			observer = targetAnimation.onAnimationGroupEndObservable.addOnce(() => {
+				if (jumpAnimationEndObserverRef.current === observer) {
+					jumpAnimationEndGroupRef.current = null;
+					jumpAnimationEndObserverRef.current = null;
+				}
+
+				if (
+					!shouldRecoverFromCompletedJumpAnimation({
+						activeState: activeAnimationStateRef.current,
+						completedState: 'jump',
+						isAirborne: latestAnimationFlagsRef.current.isAirborne,
+					})
+				) {
+					return;
+				}
+
+				activeAnimationNameRef.current = null;
+				activeAnimationStateRef.current = null;
+				setJumpPlaybackEndRevision((revision) => revision + 1);
+			});
+
+			if (observer) {
+				jumpAnimationEndGroupRef.current = targetAnimation;
+				jumpAnimationEndObserverRef.current = observer;
+			}
+		}
+	}, [
+		clearJumpAnimationEndObserver,
+		isAirborne,
+		isMoving,
+		isSprinting,
+		jumpAnimationRequestId,
+		jumpPlaybackEndRevision,
+		status,
+	]);
 
 	if (status !== 'error' || !targetMesh) {
 		return null;
