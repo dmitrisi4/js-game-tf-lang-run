@@ -4,6 +4,8 @@ import { getCapsuleCenterYForFloor } from './playerCapsuleMetrics';
 import {
 	isFloorLikeNormal,
 	isPlayerGroundMeshName,
+	isRoofParkourBuildingMeshName,
+	isTenerifeRoadsideBuildingMeshName,
 	type RoofParkourProbeAdapterType,
 	type RoofParkourProbeHitType,
 	shouldShowRoofParkourDebug,
@@ -39,6 +41,9 @@ describe('roofParkourController', () => {
 	it('classifies roof floor and wall normals', () => {
 		expect(isPlayerGroundMeshName('ground1')).toBe(true);
 		expect(isPlayerGroundMeshName(BUILDING_MESH_NAME)).toBe(true);
+		expect(isTenerifeRoadsideBuildingMeshName('tenerife-roadside-building-01-fallback')).toBe(true);
+		expect(isRoofParkourBuildingMeshName('tenerife-roadside-building-01-fallback')).toBe(true);
+		expect(isPlayerGroundMeshName('tenerife-roadside-building-01-fallback')).toBe(true);
 		expect(isPlayerGroundMeshName('letter')).toBe(false);
 		expect(isFloorLikeNormal(new Vector3(0, 1, 0))).toBe(true);
 		expect(isFloorLikeNormal(new Vector3(1, 0, 0))).toBe(false);

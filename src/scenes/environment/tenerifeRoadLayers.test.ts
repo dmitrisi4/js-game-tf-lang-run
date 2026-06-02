@@ -13,12 +13,15 @@ import {
 } from './TenerifeGeoRoadLayers';
 import {
 	buildTenerifeRoadLayerData,
+	buildTenerifeRoadsideBuildings,
 	type GeoJsonFeatureCollection,
 	projectTenerifeLonLatToWorld,
 	TENERIFE_ROAD_LAYER_STYLES,
 	TENERIFE_ROAD_PROJECTION,
+	type TenerifeRoadLayerData,
 	transformTenerifeRoadsideBuildings,
 } from './tenerifeRoadLayers';
+import { findBuildingFootprintOverlaps } from './worldPlacementValidation';
 
 describe('tenerife road layers', () => {
 	it('projects Puerto de la Cruz coordinates near the configured world offset', () => {
@@ -103,6 +106,55 @@ describe('tenerife road layers', () => {
 		expect(getRoadSurfaceMaterialRole('surface')).toBe('surface');
 	});
 
+	it('places varied placeholder houses along road lines with clearance', () => {
+		const layers: TenerifeRoadLayerData[] = [
+			{
+				...TENERIFE_ROAD_LAYER_STYLES.main,
+				lines: [[new Vector3(-80, 0, 0), new Vector3(80, 0, 0)]],
+				roadCount: 1,
+			},
+			{
+				...TENERIFE_ROAD_LAYER_STYLES.service,
+				lines: [[new Vector3(-64, 0, -24), new Vector3(64, 0, -24)]],
+				roadCount: 1,
+			},
+		];
+
+		const buildings = buildTenerifeRoadsideBuildings(layers, 24);
+		const buildingHeights = new Set(buildings.map((building) => building.collider.height));
+		const rowCounts = new Map<string, number>();
+
+		expect(buildings.length).toBeGreaterThanOrEqual(12);
+		expect(buildingHeights.size).toBeGreaterThan(2);
+		expect(findBuildingFootprintOverlaps(buildings, 0.8)).toEqual([]);
+
+		for (const building of buildings) {
+			expect(building.roadsideAnchor).toBeDefined();
+			const anchor = building.roadsideAnchor;
+
+			if (anchor) {
+				const roadEdgeClearance =
+					Math.hypot(building.position.x - anchor.position.x, building.position.z - anchor.position.z) -
+					anchor.roadWidth / 2 -
+					building.collider.width / 2;
+				const rowKey = `${anchor.position.z}:${anchor.side}`;
+				rowCounts.set(rowKey, (rowCounts.get(rowKey) ?? 0) + 1);
+				expect(roadEdgeClearance).toBeGreaterThan(1.2);
+			}
+
+			const distanceToNearestRoad = Math.min(
+				Math.abs(building.position.z),
+				Math.abs(building.position.z + 24),
+			);
+
+			expect(distanceToNearestRoad).toBeGreaterThan(4);
+			expect(distanceToNearestRoad).toBeLessThan(9);
+			expect(Math.abs(Math.sin(building.yaw))).toBeGreaterThan(0.95);
+		}
+
+		expect(Math.max(...rowCounts.values())).toBeGreaterThanOrEqual(3);
+	});
+
 	it('builds continuous road ribbon geometry with shared joins', () => {
 		const geometry = buildRoadRibbonGeometry(
 			[
@@ -165,5 +217,114 @@ describe('tenerife road layers', () => {
 		expect(building.heightOffset).toBe(0);
 		expect(building.scale).toBe(0.75);
 		expect(building.collider).toEqual({ depth: 3, height: 4.5, width: 6 });
+	});
+
+	it('recomputes full-island roadside building offsets from the transformed road anchor', () => {
+		const [building] = transformTenerifeRoadsideBuildings(
+			[
+				{
+					collider: { depth: 8, height: 5, width: 6 },
+					heightOffset: 0,
+					id: 'anchored-building',
+					modelId: 'house-1',
+					position: { x: 20, z: 4 },
+					roadsideAnchor: {
+						position: { x: 20, z: 0 },
+						roadWidth: 4,
+						side: 1,
+						setback: 4,
+						tangent: { x: 1, z: 0 },
+					},
+					scale: 1,
+					yaw: Math.PI / 2,
+				},
+			],
+			{
+				offset: { x: 100, z: -50 },
+				roadWidthScaleMultiplier: 2,
+				scale: 0.5,
+			},
+			{ roadsideSetback: 1, visualScaleMultiplier: 2 },
+		);
+
+		expect(building.position).toEqual({ x: 110, z: -44 });
+		expect(building.collider.width).toBe(6);
+	});
+
+	it('keeps transformed full-island placeholder houses clear of widened road shoulders', () => {
+		const roadTransform = {
+			offset: { x: 440, z: -270 },
+			roadWidthScaleMultiplier: 2,
+			scale: 0.675,
+		};
+		const [building] = transformTenerifeRoadsideBuildings(
+			[
+				{
+					collider: { depth: 7.8, height: 4.6, width: 5.4 },
+					heightOffset: 0.04,
+					id: 'anchored-building',
+					modelId: 'house-1',
+					position: { x: 0, z: 0 },
+					roadsideAnchor: {
+						position: { x: 10, z: 0 },
+						roadWidth: TENERIFE_ROAD_LAYER_STYLES.main.width,
+						side: 1,
+						tangent: { x: 1, z: 0 },
+					},
+					scale: 1,
+					yaw: Math.PI / 2,
+				},
+			],
+			roadTransform,
+			{ groundSink: 0.35, roadsideSetback: 2.4, visualScaleMultiplier: 1.45 },
+		);
+		const roadAnchorPosition = {
+			x: roadTransform.offset.x + 10 * roadTransform.scale,
+			z: roadTransform.offset.z,
+		};
+		const distanceFromRoadCenter = Math.hypot(
+			building.position.x - roadAnchorPosition.x,
+			building.position.z - roadAnchorPosition.z,
+		);
+		const renderedRoadShoulderHalfWidth =
+			(getTenerifeRoadRenderWidth(TENERIFE_ROAD_LAYER_STYLES.main.width, roadTransform) * 1.42) / 2;
+		const renderedBuildingHalfWidth = (building.collider.width * 0.8) / 2;
+		const visualClearance =
+			distanceFromRoadCenter - renderedRoadShoulderHalfWidth - renderedBuildingHalfWidth;
+
+		expect(visualClearance).toBeGreaterThan(1.5);
+		expect(building.collider.height * 0.84).toBeGreaterThan(3.7);
+		expect(building.heightOffset).toBeGreaterThan(-0.4);
+		expect(building.heightOffset).toBeLessThan(-0.25);
+	});
+
+	it('clips full-island roadside buildings when the transformed road anchor is hidden', () => {
+		const buildings = transformTenerifeRoadsideBuildings(
+			[
+				{
+					collider: { depth: 4, height: 5, width: 2 },
+					heightOffset: 0,
+					id: 'anchored-building',
+					modelId: 'house-1',
+					position: { x: 0, z: 0 },
+					roadsideAnchor: {
+						position: { x: 0, z: 4 },
+						roadWidth: 2,
+						side: -1,
+						tangent: { x: 1, z: 0 },
+					},
+					scale: 1,
+					yaw: Math.PI / 2,
+				},
+			],
+			{
+				clip: { maxZ: 0 },
+				offset: { x: 0, z: 0 },
+				scale: 1,
+			},
+			{ roadsideSetback: 4 },
+		);
+
+		expect(buildings).toEqual([]);
 	});
 });

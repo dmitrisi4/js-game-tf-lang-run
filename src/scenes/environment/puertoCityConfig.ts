@@ -89,12 +89,7 @@ export const getPuertoRoadRenderMode = (
 export const shouldRenderRoadMeshes = (mode: PuertoRoadRenderMode): boolean =>
 	mode === 'mesh' || mode === 'both';
 
-/**
- * Resolves whether the full-island Puerto pass should render building volumes.
- *
- * Buildings stay opt-in while the road network is being calibrated so the
- * source OSM streets can be inspected without footprint clutter.
- */
+/** Resolves whether the full-island Puerto pass should render OSM footprint building volumes. */
 export const shouldRenderPuertoBuildingsOnFullIsland = (search?: string): boolean => {
 	const params = getSearchParams(search);
 
@@ -109,16 +104,20 @@ export const getPuertoLayerPlan = (search?: string): PuertoLayerPlanType => {
 	const roadRenderMode = getPuertoRoadRenderMode(terrainMode, search);
 	const renderPuertoOverlay =
 		terrainMode !== 'island-full' || shouldRenderPuertoOnFullIsland(search);
+	const renderRoadMeshes = shouldRenderRoadMeshes(roadRenderMode) && renderPuertoOverlay;
 
 	return {
 		renderFootprintBuildings:
 			terrainMode === 'island-full' &&
 			renderPuertoOverlay &&
 			shouldRenderPuertoBuildingsOnFullIsland(search),
-		renderGeneratedRoadsideBuildings: false,
-		renderManualPreviewBuildings: terrainMode === 'island',
+		renderGeneratedRoadsideBuildings:
+			terrainMode === 'island-full' &&
+			renderRoadMeshes &&
+			!shouldRenderPuertoBuildingsOnFullIsland(search),
+		renderManualPreviewBuildings: false,
 		renderPuertoOverlay,
-		renderRoadMeshes: shouldRenderRoadMeshes(roadRenderMode) && renderPuertoOverlay,
+		renderRoadMeshes,
 		roadRenderMode,
 		terrainMode,
 	};

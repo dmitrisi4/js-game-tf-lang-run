@@ -87,6 +87,12 @@ const PLAYER_GROUND_MAX_DISTANCE = 1.35;
 const PLAYER_GROUND_STAY_DISTANCE = 1.65;
 const TENERIFE_FULL_ISLAND_SUPPORT_RAY_HEIGHT = 80;
 const TENERIFE_FULL_ISLAND_SUPPORT_RAY_LENGTH = 180;
+const TENERIFE_FULL_ISLAND_OBSTACLE_CLEARANCE = 0.16;
+const TENERIFE_FULL_ISLAND_OBSTACLE_SIDE_RAY_OFFSET = PLAYER_CAPSULE_DIAMETER * 0.36;
+const TENERIFE_FULL_ISLAND_OBSTACLE_Y_OFFSETS = [
+	-PLAYER_CAPSULE_HEIGHT * 0.18,
+	PLAYER_CAPSULE_HEIGHT * 0.16,
+];
 const PLAYER_MAX_FALL_SPEED = -18;
 /** Phase 4: acceleration / deceleration exponent rates (higher = snappier). */
 const PLAYER_MOVE_ACCELERATION = 18;
@@ -181,6 +187,75 @@ export const getTenerifeFullIslandSupportAtPosition = (
 	return null;
 };
 
+/** Checks whether the full-island kinematic player would enter a building box. */
+const isTenerifeFullIslandPlanarMoveBlocked = (
+	scene: BabylonScene,
+	currentPosition: Vector3,
+	planarOffset: Vector3,
+): boolean => {
+	if (planarOffset.lengthSquared() <= 0.0001) {
+		return false;
+	}
+
+	const direction = new Vector3(planarOffset.x, 0, planarOffset.z).normalize();
+	const right = new Vector3(-direction.z, 0, direction.x);
+	const rayLength =
+		Math.hypot(planarOffset.x, planarOffset.z) +
+		PLAYER_CAPSULE_DIAMETER / 2 +
+		TENERIFE_FULL_ISLAND_OBSTACLE_CLEARANCE;
+	const lateralOffsets = [
+		0,
+		TENERIFE_FULL_ISLAND_OBSTACLE_SIDE_RAY_OFFSET,
+		-TENERIFE_FULL_ISLAND_OBSTACLE_SIDE_RAY_OFFSET,
+	];
+
+	for (const lateralOffset of lateralOffsets) {
+		for (const yOffset of TENERIFE_FULL_ISLAND_OBSTACLE_Y_OFFSETS) {
+			const origin = currentPosition.add(right.scale(lateralOffset)).add(new Vector3(0, yOffset, 0));
+			const hit = scene.pickWithRay(
+				new Ray(origin, direction, rayLength),
+				(mesh) => mesh.isEnabled() && mesh.isPickable && isRoofParkourBuildingMeshName(mesh.name),
+			);
+
+			if (hit?.hit) {
+				return true;
+			}
+		}
+	}
+
+	return false;
+};
+
+/** Resolves a requested full-island planar move, sliding along one axis when a wall blocks it. */
+const resolveTenerifeFullIslandPlanarOffset = (
+	scene: BabylonScene,
+	currentPosition: Vector3,
+	movementDirection: Vector3,
+	moveDistance: number,
+): Vector3 => {
+	const requestedOffset = new Vector3(
+		movementDirection.x * moveDistance,
+		0,
+		movementDirection.z * moveDistance,
+	);
+
+	if (!isTenerifeFullIslandPlanarMoveBlocked(scene, currentPosition, requestedOffset)) {
+		return requestedOffset;
+	}
+
+	const xOnlyOffset = new Vector3(requestedOffset.x, 0, 0);
+	if (!isTenerifeFullIslandPlanarMoveBlocked(scene, currentPosition, xOnlyOffset)) {
+		return xOnlyOffset;
+	}
+
+	const zOnlyOffset = new Vector3(0, 0, requestedOffset.z);
+	if (!isTenerifeFullIslandPlanarMoveBlocked(scene, currentPosition, zOnlyOffset)) {
+		return zOnlyOffset;
+	}
+
+	return Vector3.Zero();
+};
+
 /** Moves the full-island player as a terrain-following kinematic body. */
 const moveTenerifeFullIslandPlayer = (
 	playerMesh: Mesh,
@@ -196,10 +271,16 @@ const moveTenerifeFullIslandPlayer = (
 } => {
 	const deltaSeconds = Math.min(scene.getEngine().getDeltaTime() / 1000, 0.05);
 	const currentPosition = playerMesh.absolutePosition;
+	const supportProbeOffset = resolveTenerifeFullIslandPlanarOffset(
+		scene,
+		currentPosition,
+		movementDirection,
+		moveSpeed * deltaSeconds,
+	);
 	const candidatePlanarPosition = new Vector3(
-		currentPosition.x + movementDirection.x * moveSpeed * deltaSeconds,
+		currentPosition.x + supportProbeOffset.x,
 		currentPosition.y,
-		currentPosition.z + movementDirection.z * moveSpeed * deltaSeconds,
+		currentPosition.z + supportProbeOffset.z,
 	);
 	const support =
 		getTenerifeFullIslandSupportAtPosition(candidatePlanarPosition, scene) ??
@@ -216,10 +297,16 @@ const moveTenerifeFullIslandPlayer = (
 			timeSeconds: performance.now() * 0.001,
 			waterSurfaceY: TENERIFE_FULL_ISLAND_WATER_SURFACE_Y,
 		});
+		const waterPlanarOffset = resolveTenerifeFullIslandPlanarOffset(
+			scene,
+			currentPosition,
+			movementDirection,
+			adjustedMoveSpeed * deltaSeconds,
+		);
 		const nextPosition = new Vector3(
-			currentPosition.x + movementDirection.x * adjustedMoveSpeed * deltaSeconds,
+			currentPosition.x + waterPlanarOffset.x,
 			waterState.swimCenterY,
-			currentPosition.z + movementDirection.z * adjustedMoveSpeed * deltaSeconds,
+			currentPosition.z + waterPlanarOffset.z,
 		);
 		playerMesh.position.copyFrom(nextPosition);
 		playerMesh.rotationQuaternion = Quaternion.Identity();
@@ -248,10 +335,16 @@ const moveTenerifeFullIslandPlayer = (
 		waterState.isInWater,
 		nextIsEnteringWater,
 	);
+	const planarOffset = resolveTenerifeFullIslandPlanarOffset(
+		scene,
+		currentPosition,
+		movementDirection,
+		adjustedMoveSpeed * deltaSeconds,
+	);
 	const nextPlanarPosition = new Vector3(
-		currentPosition.x + movementDirection.x * adjustedMoveSpeed * deltaSeconds,
+		currentPosition.x + planarOffset.x,
 		currentPosition.y,
-		currentPosition.z + movementDirection.z * adjustedMoveSpeed * deltaSeconds,
+		currentPosition.z + planarOffset.z,
 	);
 	const nextPosition = new Vector3(
 		nextPlanarPosition.x,

@@ -1,4 +1,5 @@
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
 import type { HavokPlugin } from '@babylonjs/core/Physics/v2/Plugins/havokPlugin';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -14,9 +15,13 @@ import TenerifeGeoRoadLayers from './TenerifeGeoRoadLayers';
 import TenerifeIslandPreview from './TenerifeIslandPreview';
 import TenerifeOcean from './TenerifeOcean';
 import TenerifeSafetyLayer from './TenerifeSafetyLayer';
-import { getTenerifeFullIslandPuertoOverlayTransform } from './tenerifeFullIslandConfig';
+import {
+	getTenerifeFullIslandPuertoOverlayTransform,
+	isTenerifeFullIslandTerrainMeshName,
+} from './tenerifeFullIslandConfig';
 import { getTenerifeFullIslandHeightAtPosition } from './tenerifeFullIslandHeightfield';
 import { loadTenerifeGeoData, type TenerifeGeoData } from './tenerifeGeoData';
+import { transformTenerifeRoadsideBuildings } from './tenerifeRoadLayers';
 import WorldBuildings from './WorldBuildings';
 import WorldScenery from './WorldScenery';
 import type { WorldBuilding } from './worldData';
@@ -30,6 +35,9 @@ type PropsType = {
 const EMPTY_WORLD_BUILDINGS: WorldBuilding[] = [];
 const TENERIFE_FULL_ISLAND_PUERTO_READABILITY_SCALE = 3;
 const TENERIFE_FULL_ISLAND_PUERTO_ROAD_WIDTH_SCALE = 2;
+const TENERIFE_FULL_ISLAND_ROADSIDE_BUILDING_VISUAL_SCALE = 1.45;
+const TENERIFE_FULL_ISLAND_ROADSIDE_BUILDING_SETBACK = 2.4;
+const TENERIFE_FULL_ISLAND_ROADSIDE_BUILDING_GROUND_SINK = 0.35;
 const TENERIFE_FULL_ISLAND_PUERTO_MAX_INLAND_ROAD_OFFSET = 40;
 const TENERIFE_FULL_ISLAND_VISIBLE_ROAD_LAYER_IDS = ['main', 'service'] as const;
 
@@ -110,9 +118,29 @@ const Environment: React.FC<PropsType> = ({ havokPlugin, onReadyChange }) => {
 	}, [isTenerifePreviewEnabled]);
 
 	const geoRoadLayers = tenerifeGeoData?.roadLayers ?? [];
-	const geoRoadsideBuildings: WorldBuilding[] = puertoLayerPlan.renderGeneratedRoadsideBuildings
-		? (tenerifeGeoData?.roadsideBuildings ?? [])
-		: EMPTY_WORLD_BUILDINGS;
+	const sourceRoadsideBuildings = tenerifeGeoData?.roadsideBuildings ?? EMPTY_WORLD_BUILDINGS;
+	const geoRoadsideBuildings: WorldBuilding[] = useMemo(() => {
+		if (!puertoLayerPlan.renderGeneratedRoadsideBuildings) {
+			return EMPTY_WORLD_BUILDINGS;
+		}
+
+		if (isFullIslandTerrainEnabled) {
+			return roadTransform
+				? transformTenerifeRoadsideBuildings(sourceRoadsideBuildings, roadTransform, {
+						groundSink: TENERIFE_FULL_ISLAND_ROADSIDE_BUILDING_GROUND_SINK,
+						roadsideSetback: TENERIFE_FULL_ISLAND_ROADSIDE_BUILDING_SETBACK,
+						visualScaleMultiplier: TENERIFE_FULL_ISLAND_ROADSIDE_BUILDING_VISUAL_SCALE,
+					})
+				: EMPTY_WORLD_BUILDINGS;
+		}
+
+		return sourceRoadsideBuildings;
+	}, [
+		isFullIslandTerrainEnabled,
+		puertoLayerPlan.renderGeneratedRoadsideBuildings,
+		roadTransform,
+		sourceRoadsideBuildings,
+	]);
 	const fullIslandGroundHeightProvider = useCallback(
 		(position: { x: number; z: number }): number | null => {
 			if (!isFullIslandTerrainEnabled || !isTenerifeIslandReady) {
@@ -122,6 +150,11 @@ const Environment: React.FC<PropsType> = ({ havokPlugin, onReadyChange }) => {
 			return getTenerifeFullIslandHeightAtPosition(new Vector3(position.x, 0, position.z));
 		},
 		[isFullIslandTerrainEnabled, isTenerifeIslandReady],
+	);
+	const fullIslandGroundRaycastPredicate = useCallback(
+		(mesh: AbstractMesh): boolean =>
+			isFullIslandTerrainEnabled && isTenerifeFullIslandTerrainMeshName(mesh.name),
+		[isFullIslandTerrainEnabled],
 	);
 
 	return (
@@ -176,8 +209,11 @@ const Environment: React.FC<PropsType> = ({ havokPlugin, onReadyChange }) => {
 						debugLabel='Tenerife generated roadside buildings'
 						groundHeightProvider={isFullIslandTerrainEnabled ? fullIslandGroundHeightProvider : undefined}
 						groundMeshName={isFullIslandTerrainEnabled ? undefined : 'ground1'}
-						havokPlugin={null}
-						visualMode={isFullIslandTerrainEnabled ? 'boxes' : 'models'}
+						groundRaycastPredicate={
+							isFullIslandTerrainEnabled ? fullIslandGroundRaycastPredicate : undefined
+						}
+						havokPlugin={isFullIslandTerrainEnabled ? havokPlugin : null}
+						visualMode='boxes'
 					/>
 					{isFullIslandTerrainEnabled &&
 					puertoLayerPlan.renderFootprintBuildings &&

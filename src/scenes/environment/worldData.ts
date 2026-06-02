@@ -35,11 +35,20 @@ export type WorldBuildingCollider = {
 	depth: number;
 };
 
+export type WorldBuildingRoadsideAnchor = {
+	position: WorldPosition;
+	roadWidth: number;
+	setback?: number;
+	side: -1 | 1;
+	tangent: WorldPosition;
+};
+
 export type WorldBuilding = {
 	heightOffset?: number;
 	id: string;
 	modelId: WorldBuildingModelId;
 	position: WorldPosition;
+	roadsideAnchor?: WorldBuildingRoadsideAnchor;
 	yaw: number;
 	scale: number;
 	collider: WorldBuildingCollider;

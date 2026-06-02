@@ -3,6 +3,7 @@ import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import type { RoadSurfaceType } from './roadSurfaceShader';
 import { getTerrainHeightAt } from './terrainData';
 import type { WorldBuilding, WorldBuildingModelId, WorldPosition } from './worldData';
+import { doBuildingFootprintsOverlap } from './worldPlacementValidation';
 
 export type TenerifeRoadLayerId = 'main' | 'walk' | 'service';
 
@@ -74,11 +75,37 @@ type ProjectionConfig = {
 };
 
 export type TenerifeWorldTransformType = {
+	clip?: {
+		maxX?: number;
+		maxZ?: number;
+		minX?: number;
+		minZ?: number;
+	};
 	offset: {
 		x: number;
 		z: number;
 	};
+	roadWidthScaleMultiplier?: number;
 	scale: number;
+};
+
+type RoadsideBuildingVariantType = {
+	collider: WorldBuilding['collider'];
+	modelId: WorldBuildingModelId;
+	setback: number;
+	spacing: number;
+};
+
+type RoadsideRoadSegmentType = {
+	from: WorldPosition;
+	layerId: TenerifeRoadLayerId;
+	length: number;
+	lineIndex: number;
+	midpoint: WorldPosition;
+	segmentIndex: number;
+	tangent: WorldPosition;
+	to: WorldPosition;
+	width: number;
 };
 
 const METERS_PER_LATITUDE_DEGREE = 111_320;
@@ -134,24 +161,6 @@ export const TENERIFE_ROAD_LAYER_STYLES: Record<TenerifeRoadLayerId, TenerifeRoa
 	},
 };
 
-const TENERIFE_BUILDING_MODELS: WorldBuildingModelId[] = [
-	'building-1-small',
-	'building-2-small',
-	'building-3-small',
-	'house-1',
-	'house-2',
-	'building-4',
-];
-
-const TENERIFE_BUILDING_COLLIDERS: Record<WorldBuildingModelId, WorldBuilding['collider']> = {
-	'building-1-small': { width: 4.8, height: 5.8, depth: 3.5 },
-	'building-2-small': { width: 4.6, height: 6.2, depth: 3.2 },
-	'building-3-small': { width: 3.9, height: 6.8, depth: 5.3 },
-	'building-4': { width: 5.8, height: 7.2, depth: 5.4 },
-	'house-1': { width: 3.7, height: 4.2, depth: 5.4 },
-	'house-2': { width: 4.8, height: 3.8, depth: 4.1 },
-};
-
 export const TENERIFE_ROAD_PROJECTION: ProjectionConfig = {
 	centerLat: TENERIFE_CITY_CENTER_LAT,
 	centerLon: TENERIFE_CITY_CENTER_LON,
@@ -165,9 +174,53 @@ const TENERIFE_CITY_FOOTPRINT = {
 	radiusX: 235,
 	radiusZ: 165,
 };
-const TENERIFE_GENERATED_BUILDING_BASE_SCALE = 1.42;
-const TENERIFE_GENERATED_BUILDING_SCALE_STEP = 0.12;
-const TENERIFE_GENERATED_BUILDING_MIN_DISTANCE = 23;
+const TENERIFE_GENERATED_BUILDING_MAX_COUNT = 180;
+const TENERIFE_ROADSIDE_BUILDING_END_CLEARANCE = 5.5;
+const TENERIFE_ROADSIDE_BUILDING_JUNCTION_CLEARANCE = 7.5;
+const TENERIFE_ROADSIDE_BUILDING_MIN_CLEARANCE = 0.8;
+const TENERIFE_ROADSIDE_OTHER_ROAD_CLEARANCE = 1.2;
+const TENERIFE_ROADSIDE_MAIN_SEGMENT_MIN_LENGTH = 24;
+const TENERIFE_ROADSIDE_SERVICE_SEGMENT_MIN_LENGTH = 20;
+const TENERIFE_ROADSIDE_BOTH_SIDE_MIN_LENGTH = 34;
+const TENERIFE_ROADSIDE_MAX_HOUSES_PER_SIDE = 5;
+const TENERIFE_ROADSIDE_BUILDING_VARIANTS: RoadsideBuildingVariantType[] = [
+	{
+		collider: { width: 5.4, height: 4.6, depth: 7.8 },
+		modelId: 'house-1',
+		setback: 1.45,
+		spacing: 1.4,
+	},
+	{
+		collider: { width: 6.2, height: 5.1, depth: 8.9 },
+		modelId: 'house-2',
+		setback: 1.6,
+		spacing: 1.5,
+	},
+	{
+		collider: { width: 6.6, height: 7.4, depth: 9.8 },
+		modelId: 'building-1-small',
+		setback: 1.5,
+		spacing: 1.65,
+	},
+	{
+		collider: { width: 5.9, height: 8.4, depth: 8.3 },
+		modelId: 'building-3-small',
+		setback: 1.4,
+		spacing: 1.5,
+	},
+	{
+		collider: { width: 7.8, height: 6.3, depth: 12.2 },
+		modelId: 'building-2-small',
+		setback: 1.9,
+		spacing: 1.8,
+	},
+	{
+		collider: { width: 8.6, height: 9.4, depth: 13.2 },
+		modelId: 'building-4',
+		setback: 2.1,
+		spacing: 2,
+	},
+];
 
 export const isInsideTenerifeCityFootprint = (position: WorldPosition): boolean => {
 	const normalizedX =
@@ -281,87 +334,304 @@ export const buildTenerifeRoadLayerDataFromRuntime = (
 const isInsideBuildingPlacementArea = (position: WorldPosition): boolean =>
 	isInsideTenerifeCityFootprint(position);
 
-const isFarEnoughFromExistingBuildings = (
-	position: WorldPosition,
-	buildings: WorldBuilding[],
-): boolean =>
-	buildings.every((building) => {
-		const dx = position.x - building.position.x;
-		const dz = position.z - building.position.z;
+const getDeterministicUnit = (seed: number): number => {
+	const value = Math.sin(seed * 12.9898) * 43_758.5453;
+
+	return value - Math.floor(value);
+};
+
+const roundWorldValue = (value: number): number => Number(value.toFixed(2));
+const roundUnitValue = (value: number): number => Number(value.toFixed(4));
+
+const getRoadsideNormal = (tangent: WorldPosition, side: -1 | 1): WorldPosition => ({
+	x: -tangent.z * side,
+	z: tangent.x * side,
+});
+
+const getSegmentMinimumLength = (layerId: TenerifeRoadLayerId): number =>
+	layerId === 'service'
+		? TENERIFE_ROADSIDE_SERVICE_SEGMENT_MIN_LENGTH
+		: TENERIFE_ROADSIDE_MAIN_SEGMENT_MIN_LENGTH;
+
+const getCityFootprintPriority = (position: WorldPosition): number => {
+	const normalizedX =
+		(position.x - TENERIFE_CITY_FOOTPRINT.centerX) / TENERIFE_CITY_FOOTPRINT.radiusX;
+	const normalizedZ =
+		(position.z - TENERIFE_CITY_FOOTPRINT.centerZ) / TENERIFE_CITY_FOOTPRINT.radiusZ;
+	const distanceSquared = normalizedX * normalizedX + normalizedZ * normalizedZ;
+
+	return Math.max(0, 1 - distanceSquared);
+};
+
+const getRoadSegmentPriority = (segment: RoadsideRoadSegmentType): number => {
+	const layerPriority = segment.layerId === 'main' ? 420 : 180;
+	const cityPriority = getCityFootprintPriority(segment.midpoint) * 220;
+
+	return layerPriority + cityPriority + Math.min(segment.length, 90);
+};
+
+const getRoadSegments = (layers: TenerifeRoadLayerData[]): RoadsideRoadSegmentType[] => {
+	const roadSegments: RoadsideRoadSegmentType[] = [];
+	const layerOrder: TenerifeRoadLayerId[] = ['main', 'service'];
+
+	for (const layerId of layerOrder) {
+		const layer = layers.find((candidateLayer) => candidateLayer.id === layerId);
+		const minimumLength = getSegmentMinimumLength(layerId);
+
+		if (!layer) {
+			continue;
+		}
+
+		layer.lines.forEach((line, lineIndex) => {
+			for (let segmentIndex = 0; segmentIndex < line.length - 1; segmentIndex += 1) {
+				const from = line[segmentIndex];
+				const to = line[segmentIndex + 1];
+				const dx = to.x - from.x;
+				const dz = to.z - from.z;
+				const length = Math.hypot(dx, dz);
+				const midpoint = {
+					x: (from.x + to.x) / 2,
+					z: (from.z + to.z) / 2,
+				};
+
+				if (length < minimumLength || !isInsideTenerifeCityFootprint(midpoint)) {
+					continue;
+				}
+
+				roadSegments.push({
+					from: { x: from.x, z: from.z },
+					layerId,
+					length,
+					lineIndex,
+					midpoint,
+					segmentIndex,
+					tangent: {
+						x: dx / length,
+						z: dz / length,
+					},
+					to: { x: to.x, z: to.z },
+					width: layer.width,
+				});
+			}
+		});
+	}
+
+	return roadSegments.sort((a, b) => getRoadSegmentPriority(b) - getRoadSegmentPriority(a));
+};
+
+const getJunctionPoints = (layers: TenerifeRoadLayerData[]): WorldPosition[] => {
+	const endpoints = new Map<string, { count: number; position: WorldPosition }>();
+
+	for (const layer of layers) {
+		if (layer.id === 'walk') {
+			continue;
+		}
+
+		for (const line of layer.lines) {
+			const endpointCandidates = [line[0], line[line.length - 1]];
+
+			for (const point of endpointCandidates) {
+				const position = { x: roundWorldValue(point.x), z: roundWorldValue(point.z) };
+				const key = `${Math.round(position.x)}:${Math.round(position.z)}`;
+				const endpoint = endpoints.get(key);
+
+				if (endpoint) {
+					endpoint.count += 1;
+				} else {
+					endpoints.set(key, { count: 1, position });
+				}
+			}
+		}
+	}
+
+	return Array.from(endpoints.values())
+		.filter((endpoint) => endpoint.count > 1)
+		.map((endpoint) => endpoint.position);
+};
+
+const isNearRoadJunction = (position: WorldPosition, junctionPoints: WorldPosition[]): boolean =>
+	junctionPoints.some((junction) => {
+		const dx = position.x - junction.x;
+		const dz = position.z - junction.z;
 
 		return (
-			dx * dx + dz * dz >
-			TENERIFE_GENERATED_BUILDING_MIN_DISTANCE * TENERIFE_GENERATED_BUILDING_MIN_DISTANCE
+			dx * dx + dz * dz <
+			TENERIFE_ROADSIDE_BUILDING_JUNCTION_CLEARANCE * TENERIFE_ROADSIDE_BUILDING_JUNCTION_CLEARANCE
 		);
 	});
 
+const hasBuildingFootprintClearance = (
+	candidate: WorldBuilding,
+	buildings: WorldBuilding[],
+): boolean =>
+	buildings.every(
+		(building) =>
+			!doBuildingFootprintsOverlap(candidate, building, TENERIFE_ROADSIDE_BUILDING_MIN_CLEARANCE),
+	);
+
+const getDistanceToRoadSegment = (
+	position: WorldPosition,
+	segment: RoadsideRoadSegmentType,
+): number => {
+	const fromToX = segment.to.x - segment.from.x;
+	const fromToZ = segment.to.z - segment.from.z;
+	const segmentLengthSquared = fromToX * fromToX + fromToZ * fromToZ;
+
+	if (segmentLengthSquared <= 0) {
+		return Math.hypot(position.x - segment.from.x, position.z - segment.from.z);
+	}
+
+	const positionT =
+		((position.x - segment.from.x) * fromToX + (position.z - segment.from.z) * fromToZ) /
+		segmentLengthSquared;
+	const clampedT = Math.max(0, Math.min(1, positionT));
+	const closest = {
+		x: segment.from.x + fromToX * clampedT,
+		z: segment.from.z + fromToZ * clampedT,
+	};
+
+	return Math.hypot(position.x - closest.x, position.z - closest.z);
+};
+
+const isSameRoadSegment = (
+	first: RoadsideRoadSegmentType,
+	second: RoadsideRoadSegmentType,
+): boolean =>
+	first.layerId === second.layerId &&
+	first.lineIndex === second.lineIndex &&
+	first.segmentIndex === second.segmentIndex;
+
+const isTooCloseToOtherRoadSurface = (
+	candidate: WorldBuilding,
+	sourceSegment: RoadsideRoadSegmentType,
+	roadSegments: RoadsideRoadSegmentType[],
+): boolean =>
+	roadSegments.some((segment) => {
+		if (isSameRoadSegment(segment, sourceSegment)) {
+			return false;
+		}
+
+		const minimumDistance =
+			segment.width / 2 + candidate.collider.width / 2 + TENERIFE_ROADSIDE_OTHER_ROAD_CLEARANCE;
+
+		return getDistanceToRoadSegment(candidate.position, segment) < minimumDistance;
+	});
+
+const getRoadsideYaw = (tangent: WorldPosition, side: number): number => {
+	const yaw = Math.atan2(tangent.x, tangent.z) + (side > 0 ? 0 : Math.PI);
+
+	return Math.atan2(Math.sin(yaw), Math.cos(yaw));
+};
+
+const getSideOrder = (seed: number): (-1 | 1)[] => (seed % 2 === 0 ? [1, -1] : [-1, 1]);
+
+const shouldPlaceBothSides = (segment: RoadsideRoadSegmentType): boolean =>
+	segment.layerId === 'main' && segment.length >= TENERIFE_ROADSIDE_BOTH_SIDE_MIN_LENGTH;
+
+const getRoadSegmentAnchorPosition = (
+	segment: RoadsideRoadSegmentType,
+	distance: number,
+): WorldPosition => ({
+	x: segment.from.x + segment.tangent.x * distance,
+	z: segment.from.z + segment.tangent.z * distance,
+});
+
+/**
+ * Derives natural-looking placeholder houses from Puerto road polylines.
+ */
 export const buildTenerifeRoadsideBuildings = (
 	layers: TenerifeRoadLayerData[],
-	maxBuildings = 72,
+	maxBuildings = TENERIFE_GENERATED_BUILDING_MAX_COUNT,
 ): WorldBuilding[] => {
-	const mainLayer = layers.find((layer) => layer.id === 'main');
+	const roadSegments = getRoadSegments(layers);
 	const buildings: WorldBuilding[] = [];
 
-	if (!mainLayer) {
+	if (roadSegments.length === 0) {
 		return buildings;
 	}
 
-	let candidateIndex = 0;
+	const junctionPoints = getJunctionPoints(layers);
 
-	for (const line of mainLayer.lines) {
-		for (let pointIndex = 0; pointIndex < line.length - 1; pointIndex += 1) {
-			const from = line[pointIndex];
-			const to = line[pointIndex + 1];
-			const dx = to.x - from.x;
-			const dz = to.z - from.z;
-			const segmentLength = Math.hypot(dx, dz);
-			const segmentMidpoint = {
-				x: (from.x + to.x) / 2,
-				z: (from.z + to.z) / 2,
-			};
+	for (const [segmentOrderIndex, segment] of roadSegments.entries()) {
+		const segmentSeed =
+			(segment.lineIndex + 1) * 127 + (segment.segmentIndex + 1) * 53 + segmentOrderIndex * 17;
+		const sideOrder = getSideOrder(segmentSeed);
+		const sidesToTry = shouldPlaceBothSides(segment) ? sideOrder : [sideOrder[0]];
 
-			if (segmentLength < 16 || !isInsideTenerifeCityFootprint(segmentMidpoint)) {
-				continue;
-			}
+		for (const side of sidesToTry) {
+			let distance =
+				TENERIFE_ROADSIDE_BUILDING_END_CLEARANCE + getDeterministicUnit(segmentSeed + side * 11) * 1.8;
+			let housesOnSide = 0;
 
-			const placementsOnSegment = Math.max(1, Math.floor(segmentLength / 48));
-
-			for (let placementIndex = 0; placementIndex < placementsOnSegment; placementIndex += 1) {
+			while (
+				housesOnSide < TENERIFE_ROADSIDE_MAX_HOUSES_PER_SIDE &&
+				distance < segment.length - TENERIFE_ROADSIDE_BUILDING_END_CLEARANCE
+			) {
 				if (buildings.length >= maxBuildings) {
 					return buildings;
 				}
 
-				const t = (placementIndex + 0.5) / placementsOnSegment;
-				const side = candidateIndex % 2 === 0 ? 1 : -1;
-				const offsetDistance = 13 + (candidateIndex % 3) * 2.6;
-				const normalX = (-dz / segmentLength) * side;
-				const normalZ = (dx / segmentLength) * side;
+				const variantSeed = segmentSeed + housesOnSide * 31 + (side > 0 ? 11 : 23);
+				const variant =
+					TENERIFE_ROADSIDE_BUILDING_VARIANTS[variantSeed % TENERIFE_ROADSIDE_BUILDING_VARIANTS.length];
+				const frontageLength = variant.collider.depth;
+				const anchorDistance = distance + frontageLength / 2;
+
+				if (anchorDistance > segment.length - TENERIFE_ROADSIDE_BUILDING_END_CLEARANCE) {
+					break;
+				}
+
+				const anchorPosition = getRoadSegmentAnchorPosition(segment, anchorDistance);
+				const setbackJitter = getDeterministicUnit(variantSeed * 3) * 0.45;
+				const offsetDistance =
+					segment.width / 2 + variant.collider.width / 2 + variant.setback + setbackJitter;
+				const normal = getRoadsideNormal(segment.tangent, side);
 				const position = {
-					x: Number((from.x + dx * t + normalX * offsetDistance).toFixed(2)),
-					z: Number((from.z + dz * t + normalZ * offsetDistance).toFixed(2)),
+					x: roundWorldValue(anchorPosition.x + normal.x * offsetDistance),
+					z: roundWorldValue(anchorPosition.z + normal.z * offsetDistance),
 				};
-				candidateIndex += 1;
 
 				if (
 					!isInsideBuildingPlacementArea(position) ||
-					!isFarEnoughFromExistingBuildings(position, buildings)
+					isNearRoadJunction(anchorPosition, junctionPoints)
 				) {
+					distance += frontageLength + variant.spacing;
+					housesOnSide += 1;
 					continue;
 				}
 
-				const modelId = TENERIFE_BUILDING_MODELS[candidateIndex % TENERIFE_BUILDING_MODELS.length];
-
-				buildings.push({
-					collider: TENERIFE_BUILDING_COLLIDERS[modelId],
+				const candidate = {
+					collider: variant.collider,
 					heightOffset: 0.04,
 					id: `tenerife-roadside-building-${String(buildings.length + 1).padStart(2, '0')}`,
-					modelId,
+					modelId: variant.modelId,
 					position,
-					scale:
-						TENERIFE_GENERATED_BUILDING_BASE_SCALE +
-						(candidateIndex % 5) * TENERIFE_GENERATED_BUILDING_SCALE_STEP,
-					yaw: Math.atan2(dx, dz) + (side > 0 ? Math.PI / 2 : -Math.PI / 2),
-				});
+					roadsideAnchor: {
+						position: {
+							x: roundWorldValue(anchorPosition.x),
+							z: roundWorldValue(anchorPosition.z),
+						},
+						roadWidth: segment.width,
+						side,
+						setback: variant.setback + setbackJitter,
+						tangent: {
+							x: roundUnitValue(segment.tangent.x),
+							z: roundUnitValue(segment.tangent.z),
+						},
+					},
+					scale: 1,
+					yaw: getRoadsideYaw(segment.tangent, side),
+				} satisfies WorldBuilding;
+
+				if (
+					hasBuildingFootprintClearance(candidate, buildings) &&
+					!isTooCloseToOtherRoadSurface(candidate, segment, roadSegments)
+				) {
+					buildings.push(candidate);
+				}
+
+				distance += frontageLength + variant.spacing + getDeterministicUnit(variantSeed * 5) * 0.9;
+				housesOnSide += 1;
 			}
 		}
 	}
@@ -376,25 +646,70 @@ export const transformTenerifeRoadsideBuildings = (
 	options: {
 		groundSink?: number;
 		positionScaleMultiplier?: number;
+		roadsideSetback?: number;
 		visualScaleMultiplier?: number;
 	} = {},
-): WorldBuilding[] =>
-	buildings.map((building) => {
+): WorldBuilding[] => {
+	const isInsideTransformClip = (position: WorldPosition): boolean => {
+		const clip = transform.clip;
+
+		if (!clip) {
+			return true;
+		}
+
+		return (
+			(clip.minX === undefined || position.x >= clip.minX) &&
+			(clip.maxX === undefined || position.x <= clip.maxX) &&
+			(clip.minZ === undefined || position.z >= clip.minZ) &&
+			(clip.maxZ === undefined || position.z <= clip.maxZ)
+		);
+	};
+
+	const transformPosition = (position: WorldPosition, scale: number): WorldPosition => ({
+		x: transform.offset.x + position.x * scale,
+		z: transform.offset.z + position.z * scale,
+	});
+
+	return buildings.flatMap((building) => {
 		const positionScale = transform.scale * (options.positionScaleMultiplier ?? 1);
 		const visualScale = transform.scale * (options.visualScaleMultiplier ?? 1);
+		const collider = {
+			depth: building.collider.depth * visualScale,
+			height: building.collider.height * visualScale,
+			width: building.collider.width * visualScale,
+		};
+		const anchor = building.roadsideAnchor;
+		const transformedPosition = anchor
+			? (() => {
+					const roadAnchorPosition = transformPosition(anchor.position, positionScale);
+
+					if (!isInsideTransformClip(roadAnchorPosition)) {
+						return null;
+					}
+
+					const roadWidth =
+						anchor.roadWidth * transform.scale * (transform.roadWidthScaleMultiplier ?? 1);
+					const normal = getRoadsideNormal(anchor.tangent, anchor.side);
+					const setback = options.roadsideSetback ?? anchor.setback ?? 0.9;
+					const offsetDistance = roadWidth / 2 + collider.width / 2 + setback;
+
+					return {
+						x: roadAnchorPosition.x + normal.x * offsetDistance,
+						z: roadAnchorPosition.z + normal.z * offsetDistance,
+					};
+				})()
+			: transformPosition(building.position, positionScale);
+
+		if (!transformedPosition || !isInsideTransformClip(transformedPosition)) {
+			return [];
+		}
 
 		return {
 			...building,
-			collider: {
-				depth: building.collider.depth * visualScale,
-				height: building.collider.height * visualScale,
-				width: building.collider.width * visualScale,
-			},
+			collider,
 			heightOffset: (building.heightOffset ?? 0) * visualScale - (options.groundSink ?? 0),
-			position: {
-				x: transform.offset.x + building.position.x * positionScale,
-				z: transform.offset.z + building.position.z * positionScale,
-			},
+			position: transformedPosition,
 			scale: building.scale * visualScale,
 		};
 	});
+};

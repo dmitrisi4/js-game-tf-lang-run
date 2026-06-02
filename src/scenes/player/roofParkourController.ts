@@ -115,9 +115,14 @@ export const shouldShowRoofParkourDebug = (search: string | undefined): boolean 
 	return params.get('roofDebug') === '1';
 };
 
+/** Resolves whether a mesh belongs to generated Tenerife roadside placeholders. */
+export const isTenerifeRoadsideBuildingMeshName = (meshName: string): boolean =>
+	meshName.startsWith('tenerife-roadside-building-') &&
+	(meshName.endsWith('-fallback') || meshName.endsWith('-collider'));
+
 /** Resolves whether a mesh is a Puerto building wall or roof candidate. */
 export const isRoofParkourBuildingMeshName = (meshName: string): boolean =>
-	isPuertoCityBuildingMeshName(meshName);
+	isPuertoCityBuildingMeshName(meshName) || isTenerifeRoadsideBuildingMeshName(meshName);
 
 /** Resolves whether a ground ray hit should count as floor for player grounding. */
 export const isPlayerGroundMeshName = (meshName: string): boolean =>

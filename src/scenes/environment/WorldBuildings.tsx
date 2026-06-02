@@ -3,6 +3,7 @@ import { Ray } from '@babylonjs/core/Culling/ray';
 import { LoadAssetContainerAsync } from '@babylonjs/core/Loading/sceneLoader';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
+import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
 import { Mesh } from '@babylonjs/core/Meshes/mesh';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { PhysicsShapeType } from '@babylonjs/core/Physics/v2/IPhysicsEnginePlugin';
@@ -15,6 +16,14 @@ import { useScene } from 'react-babylonjs';
 import { publicAssetUrl } from '@/utils/publicAssetUrl';
 import { finishTenerifePerfTimer, startTenerifePerfTimer } from './tenerifePerformance';
 import { getTerrainHeightAt } from './terrainData';
+import {
+	getWorldBuildingAnchorPosition,
+	getWorldBuildingColliderCenterY,
+	getWorldBuildingFallbackCenterY,
+	getWorldBuildingFootprintGroundY,
+	getWorldBuildingFoundationCenterY,
+	getWorldBuildingFoundationDepth,
+} from './worldBuildingGrounding';
 import type { WorldBuilding, WorldBuildingModelId, WorldPosition } from './worldData';
 
 type PropsType = {
@@ -22,6 +31,7 @@ type PropsType = {
 	debugLabel?: string;
 	groundHeightProvider?: GroundHeightProviderType;
 	groundMeshName?: string;
+	groundRaycastPredicate?: GroundRaycastPredicateType;
 	havokPlugin: HavokPlugin | null;
 	onReadyChange?: (isReady: boolean) => void;
 	positionOffset?: { x: number; z: number };
@@ -29,6 +39,7 @@ type PropsType = {
 };
 
 type GroundHeightProviderType = (position: WorldPosition) => number | null;
+type GroundRaycastPredicateType = (mesh: AbstractMesh) => boolean;
 
 const BUILDING_MODEL_ROOT_URL = publicAssetUrl('/models/build/buildings-pack-jan2019/OBJ/');
 const BUILDING_MODEL_FILENAMES: Record<WorldBuildingModelId, string> = {
@@ -40,6 +51,8 @@ const BUILDING_MODEL_FILENAMES: Record<WorldBuildingModelId, string> = {
 	'house-2': 'House2.obj',
 };
 const BUILDING_PHYSICS_OPTIONS = { mass: 0, restitution: 0.02, friction: 0.22 };
+const BUILDING_GROUND_RAY_START_Y = 260;
+const BUILDING_GROUND_RAY_LENGTH = 560;
 const buildingAssetContainerCache = new WeakMap<
 	BabylonScene,
 	Map<string, Promise<AssetContainer>>
@@ -71,11 +84,116 @@ const getBuildingBasePosition = (
 	positionOffset = { x: 0, z: 0 },
 	groundHeightProvider?: GroundHeightProviderType,
 ): Vector3 => {
-	const x = building.position.x + positionOffset.x;
-	const z = building.position.z + positionOffset.z;
-	const groundY = groundHeightProvider?.({ x, z }) ?? getTerrainHeightAt({ x, z });
+	const anchor = getWorldBuildingAnchorPosition(building, positionOffset);
+	const providerGroundY = groundHeightProvider
+		? getWorldBuildingFootprintGroundY(building, groundHeightProvider, { positionOffset })
+		: null;
+	const terrainGroundY =
+		providerGroundY ??
+		getWorldBuildingFootprintGroundY(building, getTerrainHeightAt, { positionOffset }) ??
+		getTerrainHeightAt(anchor);
 
-	return new Vector3(x, groundY + (building.heightOffset ?? 0), z);
+	return new Vector3(anchor.x, terrainGroundY + (building.heightOffset ?? 0), anchor.z);
+};
+
+const isRaycastGroundCandidate = (
+	candidateMesh: AbstractMesh,
+	namedGround: AbstractMesh | null,
+	groundMeshName?: string,
+	groundRaycastPredicate?: GroundRaycastPredicateType,
+): boolean => {
+	if (!candidateMesh.isEnabled() || !candidateMesh.isPickable) {
+		return false;
+	}
+
+	if (groundMeshName) {
+		return candidateMesh === namedGround;
+	}
+
+	return groundRaycastPredicate?.(candidateMesh) ?? false;
+};
+
+const hasRaycastGroundCandidate = (
+	scene: BabylonScene,
+	groundMeshName?: string,
+	groundRaycastPredicate?: GroundRaycastPredicateType,
+): boolean => {
+	if (!groundMeshName && !groundRaycastPredicate) {
+		return false;
+	}
+
+	const namedGround = groundMeshName ? scene.getMeshByName(groundMeshName) : null;
+
+	return scene.meshes.some((mesh) =>
+		isRaycastGroundCandidate(mesh, namedGround, groundMeshName, groundRaycastPredicate),
+	);
+};
+
+const getRaycastGroundYAtPosition = (
+	scene: BabylonScene,
+	position: WorldPosition,
+	groundMeshName?: string,
+	groundRaycastPredicate?: GroundRaycastPredicateType,
+): number | null => {
+	if (!groundMeshName && !groundRaycastPredicate) {
+		return null;
+	}
+
+	const namedGround = groundMeshName ? scene.getMeshByName(groundMeshName) : null;
+	const groundHit = scene.pickWithRay(
+		new Ray(
+			new Vector3(position.x, BUILDING_GROUND_RAY_START_Y, position.z),
+			Vector3.DownReadOnly,
+			BUILDING_GROUND_RAY_LENGTH,
+		),
+		(candidateMesh) =>
+			isRaycastGroundCandidate(candidateMesh, namedGround, groundMeshName, groundRaycastPredicate),
+	);
+
+	return groundHit?.hit && groundHit.pickedPoint ? groundHit.pickedPoint.y : null;
+};
+
+const getRaycastGroundY = (
+	scene: BabylonScene,
+	building: WorldBuilding,
+	positionOffset = { x: 0, z: 0 },
+	groundMeshName?: string,
+	groundRaycastPredicate?: GroundRaycastPredicateType,
+): number | null => {
+	return getWorldBuildingFootprintGroundY(
+		building,
+		(samplePoint) =>
+			getRaycastGroundYAtPosition(scene, samplePoint, groundMeshName, groundRaycastPredicate),
+		{ positionOffset },
+	);
+};
+
+const setFallbackVisibility = (
+	bodyMesh: Mesh,
+	foundationMesh: Mesh | null,
+	isVisible: boolean,
+	isBodyPickable: boolean,
+): void => {
+	bodyMesh.isVisible = isVisible;
+	bodyMesh.isPickable = isBodyPickable;
+
+	if (foundationMesh) {
+		foundationMesh.isVisible = isVisible;
+		foundationMesh.isPickable = false;
+	}
+};
+
+const alignFallbackVisualsToGround = (
+	bodyMesh: Mesh,
+	foundationMesh: Mesh | null,
+	building: WorldBuilding,
+	groundY: number,
+): void => {
+	bodyMesh.position.y = getWorldBuildingFallbackCenterY(building, groundY);
+
+	if (foundationMesh) {
+		foundationMesh.position.y = getWorldBuildingFoundationCenterY(building, groundY);
+	}
 };
 
 const disablePickingForImportedRoot = (rootNode: TransformNode): void => {
@@ -122,47 +240,213 @@ const normalizeImportedRootsToZeroY = (rootNodes: TransformNode[]): void => {
 
 const BuildingFallback: React.FC<{
 	building: WorldBuilding;
+	groundMeshName?: string;
 	groundHeightProvider?: GroundHeightProviderType;
+	groundRaycastPredicate?: GroundRaycastPredicateType;
 	positionOffset?: { x: number; z: number };
-}> = ({ building, groundHeightProvider, positionOffset }) => {
-	const basePosition = getBuildingBasePosition(building, positionOffset, groundHeightProvider);
+	showFoundation?: boolean;
+}> = ({
+	building,
+	groundHeightProvider,
+	groundMeshName,
+	groundRaycastPredicate,
+	positionOffset,
+	showFoundation = false,
+}) => {
+	const scene = useScene();
+	const meshRef = useRef<Mesh | null>(null);
+	const foundationRef = useRef<Mesh | null>(null);
+	const positionOffsetX = positionOffset?.x ?? 0;
+	const positionOffsetZ = positionOffset?.z ?? 0;
+	const resolvedPositionOffset = useMemo(
+		() => ({ x: positionOffsetX, z: positionOffsetZ }),
+		[positionOffsetX, positionOffsetZ],
+	);
+	const basePosition = getBuildingBasePosition(
+		building,
+		resolvedPositionOffset,
+		groundHeightProvider,
+	);
+	const baseGroundY = basePosition.y - (building.heightOffset ?? 0);
+	const foundationDepth = getWorldBuildingFoundationDepth(building);
+	const needsRaycastGround = Boolean(groundMeshName || groundRaycastPredicate);
+
+	useEffect(() => {
+		const mesh = meshRef.current;
+
+		if (!scene || !mesh || !needsRaycastGround) {
+			return undefined;
+		}
+
+		let animationFrameId = 0;
+		setFallbackVisibility(mesh, foundationRef.current, false, false);
+
+		const alignFallbackToGround = () => {
+			if (!hasRaycastGroundCandidate(scene, groundMeshName, groundRaycastPredicate)) {
+				animationFrameId = requestAnimationFrame(alignFallbackToGround);
+				return;
+			}
+
+			const groundY = getRaycastGroundY(
+				scene,
+				building,
+				resolvedPositionOffset,
+				groundMeshName,
+				groundRaycastPredicate,
+			);
+
+			if (groundY !== null) {
+				alignFallbackVisualsToGround(mesh, foundationRef.current, building, groundY);
+				setFallbackVisibility(mesh, foundationRef.current, true, true);
+				return;
+			}
+
+			animationFrameId = requestAnimationFrame(alignFallbackToGround);
+		};
+
+		alignFallbackToGround();
+
+		return () => {
+			cancelAnimationFrame(animationFrameId);
+		};
+	}, [
+		building,
+		groundMeshName,
+		groundRaycastPredicate,
+		needsRaycastGround,
+		resolvedPositionOffset,
+		scene,
+	]);
 
 	return (
-		<box
-			name={`${building.id}-fallback`}
-			size={1}
-			position={
-				new Vector3(basePosition.x, basePosition.y + building.collider.height * 0.42, basePosition.z)
-			}
-			rotation={new Vector3(0, building.yaw, 0)}
-			scaling={
-				new Vector3(
-					building.collider.width * 0.8,
-					building.collider.height * 0.84,
-					building.collider.depth * 0.8,
-				)
-			}
-		>
-			<standardMaterial
-				name={`${building.id}-fallback-material`}
-				diffuseColor={Color3.FromHexString('#7c7465')}
-				specularColor={Color3.FromHexString('#24211d')}
-			/>
-		</box>
+		<>
+			<box
+				name={`${building.id}-fallback`}
+				size={1}
+				position={
+					new Vector3(basePosition.x, basePosition.y + building.collider.height * 0.42, basePosition.z)
+				}
+				rotation={new Vector3(0, building.yaw, 0)}
+				scaling={
+					new Vector3(
+						building.collider.width * 0.8,
+						building.collider.height * 0.84,
+						building.collider.depth * 0.8,
+					)
+				}
+				onCreated={(mesh) => {
+					meshRef.current = mesh;
+					mesh.isPickable = !needsRaycastGround;
+					mesh.isVisible = !needsRaycastGround;
+				}}
+			>
+				<standardMaterial
+					name={`${building.id}-fallback-material`}
+					diffuseColor={Color3.FromHexString('#7c7465')}
+					specularColor={Color3.FromHexString('#24211d')}
+				/>
+			</box>
+			{showFoundation ? (
+				<box
+					name={`${building.id}-foundation`}
+					size={1}
+					position={
+						new Vector3(
+							basePosition.x,
+							getWorldBuildingFoundationCenterY(building, baseGroundY),
+							basePosition.z,
+						)
+					}
+					rotation={new Vector3(0, building.yaw, 0)}
+					scaling={
+						new Vector3(building.collider.width * 0.84, foundationDepth, building.collider.depth * 0.84)
+					}
+					onCreated={(mesh) => {
+						foundationRef.current = mesh;
+						mesh.isPickable = false;
+						mesh.isVisible = !needsRaycastGround;
+					}}
+				>
+					<standardMaterial
+						name={`${building.id}-foundation-material`}
+						diffuseColor={Color3.FromHexString('#554f45')}
+						specularColor={Color3.FromHexString('#191613')}
+					/>
+				</box>
+			) : null}
+		</>
 	);
 };
 
 const BuildingCollider: React.FC<{
 	building: WorldBuilding;
 	groundHeightProvider?: GroundHeightProviderType;
+	groundRaycastPredicate?: GroundRaycastPredicateType;
+	groundMeshName?: string;
 	havokPlugin: HavokPlugin | null;
 	positionOffset?: { x: number; z: number };
-}> = ({ building, groundHeightProvider, havokPlugin, positionOffset = { x: 0, z: 0 } }) => {
-	const { collider, heightOffset = 0, id, position, yaw } = building;
-	const x = position.x + positionOffset.x;
-	const z = position.z + positionOffset.z;
-	const groundY = groundHeightProvider?.({ x, z }) ?? getTerrainHeightAt({ x, z });
-	const colliderPosition = new Vector3(x, groundY + heightOffset + collider.height / 2, z);
+}> = ({
+	building,
+	groundHeightProvider,
+	groundRaycastPredicate,
+	groundMeshName,
+	havokPlugin,
+	positionOffset = { x: 0, z: 0 },
+}) => {
+	const { collider, id, yaw } = building;
+	const scene = useScene();
+	const meshRef = useRef<Mesh | null>(null);
+	const positionOffsetX = positionOffset.x;
+	const positionOffsetZ = positionOffset.z;
+	const resolvedPositionOffset = useMemo(
+		() => ({ x: positionOffsetX, z: positionOffsetZ }),
+		[positionOffsetX, positionOffsetZ],
+	);
+	const anchor = getWorldBuildingAnchorPosition(building, resolvedPositionOffset);
+	const basePosition = getBuildingBasePosition(
+		building,
+		resolvedPositionOffset,
+		groundHeightProvider,
+	);
+	const colliderPosition = new Vector3(
+		anchor.x,
+		getWorldBuildingColliderCenterY(building, basePosition.y - (building.heightOffset ?? 0)),
+		anchor.z,
+	);
+
+	useEffect(() => {
+		const mesh = meshRef.current;
+
+		if (!scene || !mesh || (!groundMeshName && !groundRaycastPredicate)) {
+			return undefined;
+		}
+
+		let animationFrameId = 0;
+
+		const alignColliderToGround = () => {
+			const raycastGroundY = getRaycastGroundY(
+				scene,
+				building,
+				resolvedPositionOffset,
+				groundMeshName,
+				groundRaycastPredicate,
+			);
+
+			if (raycastGroundY !== null) {
+				mesh.position.y = getWorldBuildingColliderCenterY(building, raycastGroundY);
+				mesh.physicsBody?.setTargetTransform(mesh.position, Quaternion.RotationYawPitchRoll(yaw, 0, 0));
+				return;
+			}
+
+			animationFrameId = requestAnimationFrame(alignColliderToGround);
+		};
+
+		alignColliderToGround();
+
+		return () => {
+			cancelAnimationFrame(animationFrameId);
+		};
+	}, [building, groundMeshName, groundRaycastPredicate, resolvedPositionOffset, scene, yaw]);
 
 	return (
 		<box
@@ -172,6 +456,7 @@ const BuildingCollider: React.FC<{
 			rotation={new Vector3(0, yaw, 0)}
 			scaling={new Vector3(collider.width, collider.height, collider.depth)}
 			onCreated={(mesh) => {
+				meshRef.current = mesh;
 				mesh.isPickable = false;
 				mesh.isVisible = false;
 			}}
@@ -191,6 +476,7 @@ const WorldBuildingModelManager: React.FC<{
 	buildings: WorldBuilding[];
 	groundHeightProvider?: GroundHeightProviderType;
 	groundMeshName?: string;
+	groundRaycastPredicate?: GroundRaycastPredicateType;
 	positionOffset?: { x: number; z: number };
 	onSettledChange: (modelId: string, isSettled: boolean) => void;
 }> = ({
@@ -198,6 +484,7 @@ const WorldBuildingModelManager: React.FC<{
 	buildings,
 	groundHeightProvider,
 	groundMeshName,
+	groundRaycastPredicate,
 	positionOffset = { x: 0, z: 0 },
 	onSettledChange,
 }) => {
@@ -205,6 +492,12 @@ const WorldBuildingModelManager: React.FC<{
 	const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
 	const anchorRef = useRef<TransformNode | null>(null);
 	const instantiatedEntriesRef = useRef<InstantiatedEntries | null>(null);
+	const positionOffsetX = positionOffset.x;
+	const positionOffsetZ = positionOffset.z;
+	const resolvedPositionOffset = useMemo(
+		() => ({ x: positionOffsetX, z: positionOffsetZ }),
+		[positionOffsetX, positionOffsetZ],
+	);
 
 	useEffect(() => {
 		onSettledChange(modelId, false);
@@ -297,13 +590,14 @@ const WorldBuildingModelManager: React.FC<{
 		let animationFrameId = 0;
 
 		const trySettleBuildings = () => {
-			// If a ground mesh is specified, wait for it to be pickable
-			if (groundMeshName) {
-				const ground = scene.getMeshByName(groundMeshName);
-				if (!ground?.isEnabled() || !ground.isPickable) {
-					animationFrameId = requestAnimationFrame(trySettleBuildings);
-					return;
-				}
+			const needsRaycastGround = Boolean(groundMeshName || groundRaycastPredicate);
+
+			if (
+				needsRaycastGround &&
+				!hasRaycastGroundCandidate(scene, groundMeshName, groundRaycastPredicate)
+			) {
+				animationFrameId = requestAnimationFrame(trySettleBuildings);
+				return;
 			}
 
 			const count = buildings.length;
@@ -311,28 +605,28 @@ const WorldBuildingModelManager: React.FC<{
 
 			for (let i = 0; i < count; i++) {
 				const b = buildings[i];
-				const x = b.position.x + positionOffset.x;
-				const z = b.position.z + positionOffset.z;
-				let y =
-					(groundHeightProvider?.({ x, z }) ?? getTerrainHeightAt({ x, z })) + (b.heightOffset ?? 0);
+				const anchor = getWorldBuildingAnchorPosition(b, resolvedPositionOffset);
+				const basePosition = getBuildingBasePosition(b, resolvedPositionOffset, groundHeightProvider);
+				let y = basePosition.y;
+				let scale = b.scale;
 
-				if (groundMeshName) {
-					const ground = scene.getMeshByName(groundMeshName);
-					if (ground) {
-						const groundHit = scene.pickWithRay(
-							new Ray(new Vector3(x, 200, z), Vector3.DownReadOnly, 400),
-							(mesh) => mesh === ground,
-						);
-						if (groundHit?.hit && groundHit.pickedPoint) {
-							y = groundHit.pickedPoint.y + (b.heightOffset ?? 0);
-						}
-					}
+				const raycastGroundY = getRaycastGroundY(
+					scene,
+					b,
+					resolvedPositionOffset,
+					groundMeshName,
+					groundRaycastPredicate,
+				);
+				if (raycastGroundY !== null) {
+					y = raycastGroundY + (b.heightOffset ?? 0);
+				} else if (needsRaycastGround) {
+					scale = 0;
 				}
 
 				const matrix = Matrix.Compose(
-					new Vector3(b.scale, b.scale, b.scale),
+					new Vector3(scale, scale, scale),
 					Quaternion.RotationYawPitchRoll(b.yaw, 0, 0),
-					new Vector3(x, y, z),
+					new Vector3(anchor.x, y, anchor.z),
 				);
 				matrix.copyToArray(matrixBuffer, i * 16);
 			}
@@ -363,8 +657,8 @@ const WorldBuildingModelManager: React.FC<{
 		groundHeightProvider,
 		modelId,
 		onSettledChange,
-		positionOffset.x,
-		positionOffset.z,
+		resolvedPositionOffset,
+		groundRaycastPredicate,
 		scene,
 	]);
 
@@ -379,7 +673,10 @@ const WorldBuildingModelManager: React.FC<{
 					key={building.id}
 					building={building}
 					groundHeightProvider={groundHeightProvider}
+					groundMeshName={groundMeshName}
+					groundRaycastPredicate={groundRaycastPredicate}
 					positionOffset={positionOffset}
+					showFoundation={false}
 				/>
 			))}
 		</>
@@ -397,6 +694,7 @@ const WorldBuildings: React.FC<PropsType> = ({
 	debugLabel,
 	groundHeightProvider,
 	groundMeshName,
+	groundRaycastPredicate,
 	havokPlugin,
 	onReadyChange,
 	positionOffset,
@@ -462,6 +760,7 @@ const WorldBuildings: React.FC<PropsType> = ({
 							buildings={groupBuildings}
 							groundHeightProvider={groundHeightProvider}
 							groundMeshName={groundMeshName}
+							groundRaycastPredicate={groundRaycastPredicate}
 							positionOffset={positionOffset}
 							onSettledChange={handleSettledChange}
 						/>
@@ -471,7 +770,10 @@ const WorldBuildings: React.FC<PropsType> = ({
 							key={building.id}
 							building={building}
 							groundHeightProvider={groundHeightProvider}
+							groundMeshName={groundMeshName}
+							groundRaycastPredicate={groundRaycastPredicate}
 							positionOffset={positionOffset}
+							showFoundation={visualMode === 'boxes'}
 						/>
 					))}
 			{buildings.map((building) => (
@@ -479,6 +781,8 @@ const WorldBuildings: React.FC<PropsType> = ({
 					key={`${building.id}-collider`}
 					building={building}
 					groundHeightProvider={groundHeightProvider}
+					groundMeshName={groundMeshName}
+					groundRaycastPredicate={groundRaycastPredicate}
 					havokPlugin={havokPlugin}
 					positionOffset={positionOffset}
 				/>

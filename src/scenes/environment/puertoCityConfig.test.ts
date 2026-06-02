@@ -36,7 +36,7 @@ describe('puertoCityConfig', () => {
 		expect(shouldRenderRoadMeshes(getPuertoRoadRenderMode('island-full'))).toBe(true);
 	});
 
-	it('keeps full island Puerto buildings opt-in while calibrating roads first', () => {
+	it('keeps full island Puerto footprint buildings opt-in', () => {
 		expect(shouldRenderPuertoBuildingsOnFullIsland('?tenerife=1&terrain=island-full')).toBe(false);
 		expect(
 			shouldRenderPuertoBuildingsOnFullIsland('?tenerife=1&terrain=island-full&buildings=1'),
@@ -69,11 +69,22 @@ describe('puertoCityConfig', () => {
 		expect(getPuertoLayerPlan('?tenerife=1')).toMatchObject({
 			renderFootprintBuildings: false,
 			renderGeneratedRoadsideBuildings: false,
-			renderManualPreviewBuildings: true,
+			renderManualPreviewBuildings: false,
+		});
+		expect(getPuertoLayerPlan('?tenerife=1&roads=none')).toMatchObject({
+			renderGeneratedRoadsideBuildings: false,
+			renderManualPreviewBuildings: false,
+			renderRoadMeshes: false,
 		});
 		expect(getPuertoLayerPlan('?tenerife=1&terrain=real&roads=both')).toMatchObject({
 			renderFootprintBuildings: false,
 			renderGeneratedRoadsideBuildings: false,
+			renderManualPreviewBuildings: false,
+			renderRoadMeshes: true,
+		});
+		expect(getPuertoLayerPlan('?tenerife=1&terrain=island-full')).toMatchObject({
+			renderFootprintBuildings: false,
+			renderGeneratedRoadsideBuildings: true,
 			renderManualPreviewBuildings: false,
 			renderRoadMeshes: true,
 		});
