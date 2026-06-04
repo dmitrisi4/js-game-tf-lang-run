@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { publicAssetUrl } from '@/utils/publicAssetUrl';
 import {
 	getPuertoLayerPlan,
+	getPuertoRoadGroundingMode,
 	getPuertoRoadRenderMode,
 	getPuertoTerrainMode,
 	PUERTO_CITY_ALBEDO_TEXTURE_URL,
@@ -31,9 +32,22 @@ describe('puertoCityConfig', () => {
 		expect(shouldRenderRoadMeshes(getPuertoRoadRenderMode('island', '?tenerife=1'))).toBe(true);
 	});
 
-	it('defaults full island Puerto overlay to visible OSM road meshes', () => {
+	it('keeps full island Puerto road meshes visible by default', () => {
 		expect(getPuertoRoadRenderMode('island-full', '?tenerife=1&terrain=island-full')).toBe('mesh');
 		expect(shouldRenderRoadMeshes(getPuertoRoadRenderMode('island-full'))).toBe(true);
+	});
+
+	it('uses terrain raycast road grounding by default on the full island', () => {
+		expect(getPuertoRoadGroundingMode('island-full', '?tenerife=1&terrain=island-full')).toBe(
+			'raycast',
+		);
+		expect(
+			getPuertoRoadGroundingMode(
+				'island-full',
+				'?tenerife=1&terrain=island-full&roadGrounding=heightfield',
+			),
+		).toBe('heightfield');
+		expect(getPuertoRoadGroundingMode('island', '?tenerife=1')).toBe('raycast');
 	});
 
 	it('keeps full island Puerto footprint buildings opt-in', () => {
@@ -87,12 +101,22 @@ describe('puertoCityConfig', () => {
 			renderGeneratedRoadsideBuildings: true,
 			renderManualPreviewBuildings: false,
 			renderRoadMeshes: true,
+			roadGroundingMode: 'raycast',
 		});
-		expect(getPuertoLayerPlan('?tenerife=1&terrain=island-full&buildings=1')).toMatchObject({
+		expect(getPuertoLayerPlan('?tenerife=1&terrain=island-full&roads=none')).toMatchObject({
+			renderFootprintBuildings: false,
+			renderGeneratedRoadsideBuildings: false,
+			renderManualPreviewBuildings: false,
+			renderRoadMeshes: false,
+		});
+		expect(
+			getPuertoLayerPlan('?tenerife=1&terrain=island-full&roadGrounding=raycast&buildings=1'),
+		).toMatchObject({
 			renderFootprintBuildings: true,
 			renderGeneratedRoadsideBuildings: false,
 			renderManualPreviewBuildings: false,
 			renderRoadMeshes: true,
+			roadGroundingMode: 'raycast',
 		});
 	});
 

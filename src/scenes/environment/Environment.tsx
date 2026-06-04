@@ -3,6 +3,7 @@ import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
 import type { HavokPlugin } from '@babylonjs/core/Physics/v2/Plugins/havokPlugin';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import TenerifeMountainTrees from '@/scenes/environment/TenerifeMountainTrees';
 import Clouds from './Clouds';
 import Ground from './Ground';
 import Lighting from './Lighting';
@@ -39,6 +40,7 @@ const TENERIFE_FULL_ISLAND_ROADSIDE_BUILDING_VISUAL_SCALE = 1.45;
 const TENERIFE_FULL_ISLAND_ROADSIDE_BUILDING_SETBACK = 2.4;
 const TENERIFE_FULL_ISLAND_ROADSIDE_BUILDING_GROUND_SINK = 0.35;
 const TENERIFE_FULL_ISLAND_PUERTO_MAX_INLAND_ROAD_OFFSET = 40;
+const TENERIFE_FULL_ISLAND_PUERTO_OVERLAY_DEFER_MS = 750;
 const TENERIFE_FULL_ISLAND_VISIBLE_ROAD_LAYER_IDS = ['main', 'service'] as const;
 
 /**
@@ -49,6 +51,7 @@ const TENERIFE_FULL_ISLAND_VISIBLE_ROAD_LAYER_IDS = ['main', 'service'] as const
  */
 const Environment: React.FC<PropsType> = ({ havokPlugin, onReadyChange }) => {
 	const [areBuildingsReady, setAreBuildingsReady] = useState(false);
+	const [isTenerifeGeoOverlayEnabled, setIsTenerifeGeoOverlayEnabled] = useState(false);
 	const [tenerifeGeoData, setTenerifeGeoData] = useState<TenerifeGeoData | null>(null);
 	const [isTenerifeIslandReady, setIsTenerifeIslandReady] = useState(false);
 	const currentSearch = typeof window === 'undefined' ? '' : window.location.search;
@@ -57,6 +60,15 @@ const Environment: React.FC<PropsType> = ({ havokPlugin, onReadyChange }) => {
 	const puertoTerrainMode = puertoLayerPlan.terrainMode;
 	const isPuertoCityTerrainEnabled = isTenerifePreviewEnabled && puertoTerrainMode === 'real';
 	const isFullIslandTerrainEnabled = isTenerifePreviewEnabled && puertoTerrainMode === 'island-full';
+	const shouldRenderTenerifeGeoOverlay =
+		isTenerifePreviewEnabled &&
+		(puertoLayerPlan.renderRoadMeshes ||
+			puertoLayerPlan.renderGeneratedRoadsideBuildings ||
+			puertoLayerPlan.renderFootprintBuildings);
+	const shouldLoadTenerifeGeoData =
+		isTenerifePreviewEnabled &&
+		(puertoLayerPlan.renderRoadMeshes || puertoLayerPlan.renderGeneratedRoadsideBuildings) &&
+		(!isFullIslandTerrainEnabled || isTenerifeGeoOverlayEnabled);
 	const fullIslandPuertoOverlayBaseTransform = useMemo(
 		() =>
 			isFullIslandTerrainEnabled && puertoLayerPlan.renderPuertoOverlay
@@ -95,7 +107,32 @@ const Environment: React.FC<PropsType> = ({ havokPlugin, onReadyChange }) => {
 	}, [areBuildingsReady, isTenerifeIslandReady, isTenerifePreviewEnabled, onReadyChange]);
 
 	useEffect(() => {
-		if (!isTenerifePreviewEnabled) {
+		if (!shouldRenderTenerifeGeoOverlay) {
+			setIsTenerifeGeoOverlayEnabled(false);
+			return undefined;
+		}
+
+		if (!isFullIslandTerrainEnabled) {
+			setIsTenerifeGeoOverlayEnabled(true);
+			return undefined;
+		}
+
+		if (!isTenerifeIslandReady) {
+			setIsTenerifeGeoOverlayEnabled(false);
+			return undefined;
+		}
+
+		const timeoutId = window.setTimeout(() => {
+			setIsTenerifeGeoOverlayEnabled(true);
+		}, TENERIFE_FULL_ISLAND_PUERTO_OVERLAY_DEFER_MS);
+
+		return () => {
+			window.clearTimeout(timeoutId);
+		};
+	}, [isFullIslandTerrainEnabled, isTenerifeIslandReady, shouldRenderTenerifeGeoOverlay]);
+
+	useEffect(() => {
+		if (!shouldLoadTenerifeGeoData) {
 			setTenerifeGeoData(null);
 			return undefined;
 		}
@@ -115,7 +152,7 @@ const Environment: React.FC<PropsType> = ({ havokPlugin, onReadyChange }) => {
 		return () => {
 			isDisposed = true;
 		};
-	}, [isTenerifePreviewEnabled]);
+	}, [shouldLoadTenerifeGeoData]);
 
 	const geoRoadLayers = tenerifeGeoData?.roadLayers ?? [];
 	const sourceRoadsideBuildings = tenerifeGeoData?.roadsideBuildings ?? EMPTY_WORLD_BUILDINGS;
@@ -177,12 +214,15 @@ const Environment: React.FC<PropsType> = ({ havokPlugin, onReadyChange }) => {
 					{isFullIslandTerrainEnabled && isTenerifeIslandReady ? (
 						<TenerifeOcean havokPlugin={havokPlugin} />
 					) : null}
+					{isFullIslandTerrainEnabled && isTenerifeIslandReady ? <TenerifeMountainTrees /> : null}
 					<TenerifeSafetyLayer
 						havokPlugin={havokPlugin}
 						renderWaterVisuals={!isFullIslandTerrainEnabled}
 					/>
-					{puertoLayerPlan.renderRoadMeshes ? (
+					{puertoLayerPlan.renderRoadMeshes &&
+					(!isFullIslandTerrainEnabled || isTenerifeGeoOverlayEnabled) ? (
 						<TenerifeGeoRoadLayers
+							groundingMode={puertoLayerPlan.roadGroundingMode}
 							groundHeightProvider={
 								isFullIslandTerrainEnabled ? fullIslandGroundHeightProvider : undefined
 							}
@@ -212,12 +252,13 @@ const Environment: React.FC<PropsType> = ({ havokPlugin, onReadyChange }) => {
 						groundRaycastPredicate={
 							isFullIslandTerrainEnabled ? fullIslandGroundRaycastPredicate : undefined
 						}
-						havokPlugin={isFullIslandTerrainEnabled ? havokPlugin : null}
+						havokPlugin={null}
 						visualMode='boxes'
 					/>
 					{isFullIslandTerrainEnabled &&
 					puertoLayerPlan.renderFootprintBuildings &&
 					isTenerifeIslandReady &&
+					isTenerifeGeoOverlayEnabled &&
 					roadTransform ? (
 						<PuertoFootprintBuildings
 							groundHeightProvider={fullIslandGroundHeightProvider}

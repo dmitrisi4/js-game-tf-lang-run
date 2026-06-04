@@ -3,6 +3,8 @@ import { shouldRenderPuertoOnFullIsland } from './tenerifeFullIslandConfig';
 
 export type PuertoRoadRenderMode = 'baked' | 'both' | 'mesh' | 'none';
 
+export type PuertoRoadGroundingMode = 'heightfield' | 'raycast';
+
 export type PuertoTerrainMode = 'island' | 'island-full' | 'real';
 
 export type PuertoLayerPlanType = {
@@ -11,6 +13,7 @@ export type PuertoLayerPlanType = {
 	renderManualPreviewBuildings: boolean;
 	renderPuertoOverlay: boolean;
 	renderRoadMeshes: boolean;
+	roadGroundingMode: PuertoRoadGroundingMode;
 	roadRenderMode: PuertoRoadRenderMode;
 	terrainMode: PuertoTerrainMode;
 };
@@ -84,6 +87,23 @@ export const getPuertoRoadRenderMode = (
 };
 
 /**
+ * Resolves how runtime road meshes should sample terrain height.
+ */
+export const getPuertoRoadGroundingMode = (
+	_terrainMode: PuertoTerrainMode,
+	search?: string,
+): PuertoRoadGroundingMode => {
+	const params = getSearchParams(search);
+	const requestedMode = params.get('roadGrounding');
+
+	if (requestedMode === 'heightfield' || requestedMode === 'raycast') {
+		return requestedMode;
+	}
+
+	return 'raycast';
+};
+
+/**
  * Checks whether runtime road ribbons should be rendered for the selected mode.
  */
 export const shouldRenderRoadMeshes = (mode: PuertoRoadRenderMode): boolean =>
@@ -102,6 +122,7 @@ export const shouldRenderPuertoBuildingsOnFullIsland = (search?: string): boolea
 export const getPuertoLayerPlan = (search?: string): PuertoLayerPlanType => {
 	const terrainMode = getPuertoTerrainMode(search);
 	const roadRenderMode = getPuertoRoadRenderMode(terrainMode, search);
+	const roadGroundingMode = getPuertoRoadGroundingMode(terrainMode, search);
 	const renderPuertoOverlay =
 		terrainMode !== 'island-full' || shouldRenderPuertoOnFullIsland(search);
 	const renderRoadMeshes = shouldRenderRoadMeshes(roadRenderMode) && renderPuertoOverlay;
@@ -118,6 +139,7 @@ export const getPuertoLayerPlan = (search?: string): PuertoLayerPlanType => {
 		renderManualPreviewBuildings: false,
 		renderPuertoOverlay,
 		renderRoadMeshes,
+		roadGroundingMode,
 		roadRenderMode,
 		terrainMode,
 	};

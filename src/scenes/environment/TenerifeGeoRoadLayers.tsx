@@ -6,6 +6,7 @@ import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useBeforeRender, useScene } from 'react-babylonjs';
+import type { PuertoRoadGroundingMode } from './puertoCityConfig';
 import {
 	createRoadSurfaceMaterial,
 	getRoadSurfaceMaterialRole,
@@ -26,6 +27,7 @@ import {
 import type { WorldPosition } from './worldData';
 
 type PropsType = {
+	groundingMode?: PuertoRoadGroundingMode;
 	groundHeightProvider?: GroundHeightProviderType;
 	roadLayers: TenerifeRoadLayerData[];
 	roadTransform?: TenerifeRoadTransformType;
@@ -119,6 +121,7 @@ const getRoadSurfaceHeight = (
 	groundHeightProvider?: GroundHeightProviderType,
 	surfaceBias = ROAD_SURFACE_BIAS,
 	heightCache?: RoadHeightCacheType,
+	groundingMode: PuertoRoadGroundingMode = 'raycast',
 ): number | null => {
 	const cacheKey = getTenerifeRoadHeightCacheKey(position);
 	const cachedHeight = heightCache?.get(cacheKey);
@@ -127,28 +130,36 @@ const getRoadSurfaceHeight = (
 		return cachedHeight === null ? null : cachedHeight + surfaceBias;
 	}
 
-	const groundHit = scene.pickWithRay(
-		new Ray(
-			new Vector3(position.x, ROAD_GROUND_RAY_START_Y, position.z),
-			Vector3.DownReadOnly,
-			ROAD_GROUND_RAY_LENGTH,
-		),
-		(mesh) =>
-			mesh.isEnabled() &&
-			mesh.isPickable &&
-			(mesh.name === 'ground1' || isTenerifeFullIslandTerrainMeshName(mesh.name)),
-	);
+	const getProvidedHeight = (): number | null => {
+		const providedHeight = groundHeightProvider?.(position);
 
-	if (groundHit?.hit && groundHit.pickedPoint) {
-		heightCache?.set(cacheKey, groundHit.pickedPoint.y);
-		return groundHit.pickedPoint.y + surfaceBias;
-	}
+		return providedHeight !== null && typeof providedHeight === 'number' ? providedHeight : null;
+	};
 
-	const providedHeight = groundHeightProvider?.(position);
+	const getRaycastHeight = (): number | null => {
+		const groundHit = scene.pickWithRay(
+			new Ray(
+				new Vector3(position.x, ROAD_GROUND_RAY_START_Y, position.z),
+				Vector3.DownReadOnly,
+				ROAD_GROUND_RAY_LENGTH,
+			),
+			(mesh) =>
+				mesh.isEnabled() &&
+				mesh.isPickable &&
+				(mesh.name === 'ground1' || isTenerifeFullIslandTerrainMeshName(mesh.name)),
+		);
 
-	if (providedHeight !== null && typeof providedHeight === 'number') {
-		heightCache?.set(cacheKey, providedHeight);
-		return providedHeight + surfaceBias;
+		return groundHit?.hit && groundHit.pickedPoint ? groundHit.pickedPoint.y : null;
+	};
+
+	const groundHeight =
+		groundingMode === 'heightfield'
+			? (getProvidedHeight() ?? getRaycastHeight())
+			: (getRaycastHeight() ?? getProvidedHeight());
+
+	if (groundHeight !== null) {
+		heightCache?.set(cacheKey, groundHeight);
+		return groundHeight + surfaceBias;
 	}
 
 	heightCache?.set(cacheKey, null);
@@ -421,6 +432,7 @@ const createRoadRibbonMeshWithUv = (
 	surfaceBias = ROAD_SURFACE_BIAS,
 	heightCache?: RoadHeightCacheType,
 	includeJunctionPads = true,
+	groundingMode: PuertoRoadGroundingMode = 'raycast',
 ): Mesh | null => {
 	return measureTenerifeSyncStep(`Road mesh creation: ${name}`, () => {
 		const renderWidth = getTenerifeRoadRenderWidth(width, roadTransform);
@@ -429,8 +441,14 @@ const createRoadRibbonMeshWithUv = (
 		const uvs: number[] = [];
 		let vertexIndex = 0;
 		const resolveOverlayHeight: RoadSurfaceHeightResolverType = (position, fallbackY) =>
-			getRoadSurfaceHeight(position, scene, groundHeightProvider, surfaceBias, heightCache) ??
-			fallbackY;
+			getRoadSurfaceHeight(
+				position,
+				scene,
+				groundHeightProvider,
+				surfaceBias,
+				heightCache,
+				groundingMode,
+			) ?? fallbackY;
 
 		for (const line of lines) {
 			let currentRibbon: RoadRibbonPointType[] = [];
@@ -478,8 +496,22 @@ const createRoadRibbonMeshWithUv = (
 					continue;
 				}
 
-				const fromY = getRoadSurfaceHeight(from, scene, groundHeightProvider, surfaceBias, heightCache);
-				const toY = getRoadSurfaceHeight(to, scene, groundHeightProvider, surfaceBias, heightCache);
+				const fromY = getRoadSurfaceHeight(
+					from,
+					scene,
+					groundHeightProvider,
+					surfaceBias,
+					heightCache,
+					groundingMode,
+				);
+				const toY = getRoadSurfaceHeight(
+					to,
+					scene,
+					groundHeightProvider,
+					surfaceBias,
+					heightCache,
+					groundingMode,
+				);
 
 				if (fromY === null || toY === null) {
 					flushRibbon();
@@ -514,7 +546,14 @@ const createRoadRibbonMeshWithUv = (
 					continue;
 				}
 
-				const y = getRoadSurfaceHeight(point, scene, groundHeightProvider, surfaceBias, heightCache);
+				const y = getRoadSurfaceHeight(
+					point,
+					scene,
+					groundHeightProvider,
+					surfaceBias,
+					heightCache,
+					groundingMode,
+				);
 
 				if (y === null) {
 					continue;
@@ -579,6 +618,7 @@ const createRoadRibbonMeshWithUv = (
  * - Road cores stay opaque; outer shoulders alpha-fade into terrain.
  */
 const TenerifeGeoRoadLayers: React.FC<PropsType> = ({
+	groundingMode = 'raycast',
 	groundHeightProvider,
 	roadLayers,
 	roadTransform,
@@ -646,6 +686,7 @@ const TenerifeGeoRoadLayers: React.FC<PropsType> = ({
 						pass.surfaceBias,
 						heightCache,
 						pass.hasJunctionPads,
+						groundingMode,
 					);
 
 					return mesh ? [mesh] : [];
@@ -657,7 +698,14 @@ const TenerifeGeoRoadLayers: React.FC<PropsType> = ({
 				mesh.dispose();
 			}
 		};
-	}, [groundHeightProvider, isGroundMeshReady, roadTransform, stableRoadLayers, scene]);
+	}, [
+		groundHeightProvider,
+		groundingMode,
+		isGroundMeshReady,
+		roadTransform,
+		stableRoadLayers,
+		scene,
+	]);
 
 	return null;
 };
