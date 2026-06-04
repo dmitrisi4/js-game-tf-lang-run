@@ -41,7 +41,11 @@ const PROCEDURAL_TREE_TRUNK_DIAMETER = 1.4;
 
 type MountainTreeSourceMeshType = Pick<
 	Mesh,
-	'doNotSyncBoundingInfo' | 'isPickable' | 'isVisible' | 'thinInstanceEnablePicking'
+	| 'alwaysSelectAsActiveMesh'
+	| 'doNotSyncBoundingInfo'
+	| 'isPickable'
+	| 'isVisible'
+	| 'thinInstanceEnablePicking'
 >;
 
 type MountainTreeInstanceMeshType = MountainTreeSourceMeshType &
@@ -160,6 +164,7 @@ const createProceduralMountainTreeRoot = (scene: BabylonScene): TransformNode =>
 
 /** Keeps imported source meshes hidden until their thin-instance transforms are ready. */
 export const prepareMountainTreeSourceMesh = (mesh: MountainTreeSourceMeshType): void => {
+	mesh.alwaysSelectAsActiveMesh = true;
 	mesh.isPickable = false;
 	mesh.thinInstanceEnablePicking = false;
 	mesh.doNotSyncBoundingInfo = false;
@@ -171,6 +176,7 @@ export const activateMountainTreeInstanceMesh = (
 	mesh: MountainTreeInstanceMeshType,
 	matrixBuffer: Float32Array,
 ): void => {
+	mesh.alwaysSelectAsActiveMesh = true;
 	mesh.doNotSyncBoundingInfo = false;
 	mesh.thinInstanceSetBuffer('matrix', matrixBuffer, 16, false);
 	mesh.thinInstanceRefreshBoundingInfo(true);

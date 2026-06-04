@@ -11,6 +11,7 @@ import {
 import { TENERIFE_FULL_ISLAND_WATER_SURFACE_Y } from '@/scenes/environment/tenerifeFullIslandConfig';
 
 type TestTreeMeshType = {
+	alwaysSelectAsActiveMesh: boolean;
 	doNotSyncBoundingInfo: boolean;
 	isPickable: boolean;
 	isVisible: boolean;
@@ -27,6 +28,7 @@ type TestTreeMeshType = {
 };
 
 const createTestTreeMesh = (): TestTreeMeshType => ({
+	alwaysSelectAsActiveMesh: false,
 	doNotSyncBoundingInfo: true,
 	isPickable: true,
 	isVisible: true,
@@ -47,6 +49,7 @@ describe('TenerifeMountainTrees', () => {
 
 		prepareMountainTreeSourceMesh(mesh);
 
+		expect(mesh.alwaysSelectAsActiveMesh).toBe(true);
 		expect(mesh.isPickable).toBe(false);
 		expect(mesh.thinInstanceEnablePicking).toBe(false);
 		expect(mesh.doNotSyncBoundingInfo).toBe(false);
@@ -73,6 +76,7 @@ describe('TenerifeMountainTrees', () => {
 
 		expect(mesh.matrixBuffer).toBe(matrixBuffer);
 		expect(mesh.refreshCount).toBe(1);
+		expect(mesh.alwaysSelectAsActiveMesh).toBe(true);
 		expect(mesh.doNotSyncBoundingInfo).toBe(true);
 		expect(mesh.isVisible).toBe(true);
 	});
