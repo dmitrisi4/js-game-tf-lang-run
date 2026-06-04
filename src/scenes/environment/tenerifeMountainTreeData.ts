@@ -1,7 +1,5 @@
-import {
-	TENERIFE_FULL_ISLAND_PLAYABLE_BOUNDS,
-	TENERIFE_FULL_ISLAND_TEIDE_POSITION,
-} from '@/scenes/environment/tenerifeFullIslandConfig';
+import { getDistanceToTeide, isInsideTeideDesert } from '@/scenes/environment/tenerifeBiomeZones';
+import { TENERIFE_FULL_ISLAND_PLAYABLE_BOUNDS } from '@/scenes/environment/tenerifeFullIslandConfig';
 
 export type TenerifeMountainTreePositionType = {
 	x: number;
@@ -62,29 +60,47 @@ type TenerifeMountainTreeCandidateType = TenerifeMountainTreePlacementType & {
 	score: number;
 };
 
-export const TENERIFE_TEIDE_DRY_ZONE_RADIUS = 390;
+// Re-export from tenerifeBiomeZones for backward-compat (tests import these).
+export { TENERIFE_TEIDE_DRY_ZONE_RADIUS } from '@/scenes/environment/tenerifeBiomeZones';
+
 export const TENERIFE_MOUNTAIN_TREE_PLAYABLE_BOUNDS = TENERIFE_FULL_ISLAND_PLAYABLE_BOUNDS;
-export const TENERIFE_MOUNTAIN_TREE_MIN_SAMPLE_HEIGHT = 22;
+export const TENERIFE_MOUNTAIN_TREE_MIN_SAMPLE_HEIGHT = 12;
 export const TENERIFE_MOUNTAIN_TREE_MAX_SAMPLE_HEIGHT = 72;
-export const TENERIFE_MOUNTAIN_TREE_MIN_SAMPLE_SLOPE = 0.018;
-export const TENERIFE_MOUNTAIN_TREE_MAX_SAMPLE_SLOPE = 0.75;
+export const TENERIFE_MOUNTAIN_TREE_MIN_SAMPLE_SLOPE = 0.012;
+export const TENERIFE_MOUNTAIN_TREE_MAX_SAMPLE_SLOPE = 0.82;
 export const TENERIFE_MOUNTAIN_TREE_MIN_TOTAL_COUNT = 200;
 
-const TREE_SCALE_VARIANTS = [-0.018, 0.006, 0.018, -0.006, 0.012, -0.012, 0.024, 0];
+const TREE_SCALE_VARIANTS = [-0.012, 0.004, 0.012, -0.004, 0.008, -0.008, 0.016, 0];
 const TREE_YAW_STEP = 2.399963229728653;
 
+/**
+ * Forest regions covering all island slopes outside the Teide volcanic desert.
+ *
+ * Scale legend  (world units = metres, GLB tree base ≈ 1 m):
+ *   0.18 → short low-slope tree  (~9 m tall)
+ *   0.22 → medium slope tree    (~11 m tall)  ← default
+ *   0.26 → tall ridge/crest tree (~13 m tall)
+ *
+ * Region spatial layout (approximate world-X / world-Z ranges):
+ *   north-slopes   : z -1320 → 0   (humid laurel belt, north coast)
+ *   south-slopes   : z 0 → 1320    (drier pine, banana belt at low alt)
+ *   east-slopes    : x 0 → 1320    (gentle eastern foothills)
+ *   west-slopes    : x -1320 → 0   (steeper anaga-adjacent ridges)
+ *   upper-pine-belt: full island, high altitude pine forest
+ */
 const TENERIFE_MOUNTAIN_FOREST_REGIONS: TenerifeMountainForestRegionType[] = [
+	// ── Upper pine belt (all aspects, high altitude) ──────────────────
 	{
-		id: 'upper-mountain-belt',
-		focus: { x: -260, z: -240 },
-		maxCount: 900,
+		id: 'upper-pine-belt',
+		focus: { x: -400, z: -100 },
+		maxCount: 1200,
 		maxHeight: TENERIFE_MOUNTAIN_TREE_MAX_SAMPLE_HEIGHT,
 		maxSlope: TENERIFE_MOUNTAIN_TREE_MAX_SAMPLE_SLOPE,
-		minHeight: TENERIFE_MOUNTAIN_TREE_MIN_SAMPLE_HEIGHT,
-		minSpacing: 8,
-		minSlope: TENERIFE_MOUNTAIN_TREE_MIN_SAMPLE_SLOPE,
-		scaleBase: 0.32,
-		scanStep: 10,
+		minHeight: 42,
+		minSpacing: 9,
+		minSlope: 0.015,
+		scaleBase: 0.22,
+		scanStep: 11,
 		slopeStep: 15,
 		xMax: 1320,
 		xMin: -1320,
@@ -92,15 +108,91 @@ const TENERIFE_MOUNTAIN_FOREST_REGIONS: TenerifeMountainForestRegionType[] = [
 		zMax: 1320,
 		zMin: -1320,
 	},
+	// ── North-slope laurel cloud forest (humid north coast) ───────────
+	{
+		id: 'north-laurel-forest',
+		focus: { x: 200, z: -600 },
+		maxCount: 900,
+		maxHeight: 58,
+		maxSlope: 0.75,
+		minHeight: 18,
+		minSpacing: 7,
+		minSlope: 0.014,
+		scaleBase: 0.2,
+		scanStep: 9,
+		slopeStep: 12,
+		xMax: 1320,
+		xMin: -1320,
+		yawSeed: 2.41,
+		zMax: 0,
+		zMin: -1320,
+	},
+	// ── South-slope mixed pine / scrub ────────────────────────────────
+	{
+		id: 'south-pine-slopes',
+		focus: { x: -100, z: 500 },
+		maxCount: 800,
+		maxHeight: 62,
+		maxSlope: 0.78,
+		minHeight: 16,
+		minSpacing: 8,
+		minSlope: 0.013,
+		scaleBase: 0.21,
+		scanStep: 10,
+		slopeStep: 13,
+		xMax: 1320,
+		xMin: -1320,
+		yawSeed: 0.77,
+		zMax: 1320,
+		zMin: 0,
+	},
+	// ── East foothills (gentle anaga / coastal ramps) ─────────────────
+	{
+		id: 'east-foothills',
+		focus: { x: 800, z: 200 },
+		maxCount: 600,
+		maxHeight: 48,
+		maxSlope: 0.65,
+		minHeight: 12,
+		minSpacing: 6,
+		minSlope: 0.012,
+		scaleBase: 0.18,
+		scanStep: 9,
+		slopeStep: 12,
+		xMax: 1320,
+		xMin: 200,
+		yawSeed: 3.14,
+		zMax: 1320,
+		zMin: -1320,
+	},
+	// ── West ridges (steep Teno-adjacent terrain) ─────────────────────
+	{
+		id: 'west-ridges',
+		focus: { x: -900, z: 100 },
+		maxCount: 600,
+		maxHeight: 60,
+		maxSlope: 0.82,
+		minHeight: 14,
+		minSpacing: 7,
+		minSlope: 0.016,
+		scaleBase: 0.2,
+		scanStep: 10,
+		slopeStep: 13,
+		xMax: -150,
+		xMin: -1320,
+		yawSeed: 1.57,
+		zMax: 1320,
+		zMin: -1320,
+	},
 ];
 
 /** Returns the horizontal runtime distance from an authored placement to Teide. */
 export const getDistanceToTenerifeTeide = ({ x, z }: TenerifeMountainTreePositionType): number =>
-	Math.hypot(x - TENERIFE_FULL_ISLAND_TEIDE_POSITION.x, z - TENERIFE_FULL_ISLAND_TEIDE_POSITION.z);
+	getDistanceToTeide(x, z);
 
 /** Keeps the immediate Teide volcanic desert clear of mountain trees. */
 export const isInsideTenerifeTeideDryZone = (position: TenerifeMountainTreePositionType): boolean =>
-	getDistanceToTenerifeTeide(position) < TENERIFE_TEIDE_DRY_ZONE_RADIUS;
+	isInsideTeideDesert(position.x, position.z);
 
 /** Keeps deterministic authored yaw values inside Babylon's expected yaw range. */
 const normalizeTreeYaw = (yaw: number): number => {

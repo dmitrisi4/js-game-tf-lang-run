@@ -83,14 +83,16 @@ describe('tenerife mountain tree data', () => {
 		}
 	});
 
-	it('generates dense trees on upper mountain terrain around Teide', () => {
+	it('generates trees across all island slopes (excluding Teide desert)', () => {
 		const trees = getGeneratedTrees();
 
-		expect(TENERIFE_MOUNTAIN_TREE_MIN_SAMPLE_HEIGHT).toBeGreaterThanOrEqual(22);
+		expect(TENERIFE_MOUNTAIN_TREE_MIN_SAMPLE_HEIGHT).toBeGreaterThanOrEqual(10);
 		expect(TENERIFE_MOUNTAIN_TREE_MAX_SAMPLE_HEIGHT).toBeGreaterThanOrEqual(70);
 		expect(trees.length).toBeGreaterThanOrEqual(TENERIFE_MOUNTAIN_TREE_MIN_TOTAL_COUNT);
 		expect(trees.length).toBeGreaterThanOrEqual(200);
-		expect(trees.every((tree) => tree.terrainSample.height >= 22)).toBe(true);
+		expect(
+			trees.every((tree) => tree.terrainSample.height >= TENERIFE_MOUNTAIN_TREE_MIN_SAMPLE_HEIGHT),
+		).toBe(true);
 		expect(trees.some((tree) => tree.position.x > 120)).toBe(true);
 		expect(trees.some((tree) => tree.position.z < -450)).toBe(true);
 		expect(trees.some((tree) => tree.position.z > 120)).toBe(true);
