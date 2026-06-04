@@ -1,12 +1,14 @@
-import type { AssetContainer, InstantiatedEntries } from '@babylonjs/core/assetContainer';
 import { Ray } from '@babylonjs/core/Culling/ray';
-import { LoadAssetContainerAsync } from '@babylonjs/core/Loading/sceneLoader';
+import { SceneLoader } from '@babylonjs/core/Loading/sceneLoader';
+import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
+import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { Matrix, Quaternion, Vector3 } from '@babylonjs/core/Maths/math.vector';
 import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh';
 import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
-import type { Scene as BabylonScene } from '@babylonjs/core/scene';
 import '@babylonjs/loaders/glTF';
+import type { Scene as BabylonScene } from '@babylonjs/core/scene';
 import type React from 'react';
 import { useEffect, useRef } from 'react';
 import { useScene } from 'react-babylonjs';
@@ -24,16 +26,18 @@ import {
 } from '@/scenes/environment/tenerifeMountainTreeData';
 import { publicAssetUrl } from '@/utils/publicAssetUrl';
 
-const SPRUCE_TREE_MODEL_URL = publicAssetUrl(
-	'/models/spruce-trees/spruce-trees/source/Trees/Tree.glb',
-);
+const SPRUCE_TREE_MODEL_URL = publicAssetUrl('/models/environment/spruce-tree.glb');
+
 const TREE_GROUND_RAY_START_Y = 320;
 const TREE_GROUND_RAY_LENGTH = 640;
 const TREE_SETTLEMENT_MAX_ATTEMPTS = 180;
 const TREE_TERRAIN_LIFT = 0.12;
 const TREE_MIN_GROUND_ABOVE_WATER = 0.75;
-
-const spruceTreeAssetContainerCache = new WeakMap<BabylonScene, Promise<AssetContainer>>();
+const PROCEDURAL_TREE_TRUNK_HEIGHT = 5.5;
+const PROCEDURAL_TREE_CANOPY_HEIGHT = 15;
+const PROCEDURAL_TREE_CANOPY_BASE_Y = 9.5;
+const PROCEDURAL_TREE_CANOPY_DIAMETER = 8;
+const PROCEDURAL_TREE_TRUNK_DIAMETER = 1.4;
 
 type MountainTreeSourceMeshType = Pick<
 	Mesh,
@@ -45,18 +49,113 @@ type MountainTreeInstanceMeshType = MountainTreeSourceMeshType &
 
 type MountainTreeSourceRootType = Pick<TransformNode, 'name'>;
 
-/** Loads and caches the spruce GLB asset container per Babylon scene. */
-const getSpruceTreeAssetContainer = (scene: BabylonScene): Promise<AssetContainer> => {
-	const cachedContainer = spruceTreeAssetContainerCache.get(scene);
+type TenerifeMountainTreeDebugBoundsType = {
+	maxHeight: number;
+	maxX: number;
+	maxZ: number;
+	minHeight: number;
+	minX: number;
+	minZ: number;
+};
 
-	if (cachedContainer) {
-		return cachedContainer;
+type TenerifeMountainTreeDebugSummaryType = {
+	bounds: TenerifeMountainTreeDebugBoundsType | null;
+	instanceMeshCount: number;
+	placementCount: number;
+	renderableRootCount: number;
+	visibleCount: number;
+};
+
+declare global {
+	interface Window {
+		__tenerifeMountainTrees?: TenerifeMountainTreeDebugSummaryType;
+	}
+}
+
+/** Summarizes live tree placement state for browser/runtime diagnostics. */
+export const createMountainTreeDebugSummary = (
+	trees: TenerifeMountainTreePlacementType[],
+	visibleCount: number,
+	instanceMeshCount: number,
+	renderableRootCount: number,
+): TenerifeMountainTreeDebugSummaryType => {
+	if (trees.length === 0) {
+		return {
+			bounds: null,
+			instanceMeshCount,
+			placementCount: 0,
+			renderableRootCount,
+			visibleCount,
+		};
 	}
 
-	const containerPromise = LoadAssetContainerAsync(SPRUCE_TREE_MODEL_URL, scene);
-	spruceTreeAssetContainerCache.set(scene, containerPromise);
+	const bounds = trees.reduce<TenerifeMountainTreeDebugBoundsType>(
+		(accumulator, tree) => ({
+			maxHeight: Math.max(accumulator.maxHeight, tree.terrainSample.height),
+			maxX: Math.max(accumulator.maxX, tree.position.x),
+			maxZ: Math.max(accumulator.maxZ, tree.position.z),
+			minHeight: Math.min(accumulator.minHeight, tree.terrainSample.height),
+			minX: Math.min(accumulator.minX, tree.position.x),
+			minZ: Math.min(accumulator.minZ, tree.position.z),
+		}),
+		{
+			maxHeight: Number.NEGATIVE_INFINITY,
+			maxX: Number.NEGATIVE_INFINITY,
+			maxZ: Number.NEGATIVE_INFINITY,
+			minHeight: Number.POSITIVE_INFINITY,
+			minX: Number.POSITIVE_INFINITY,
+			minZ: Number.POSITIVE_INFINITY,
+		},
+	);
 
-	return containerPromise;
+	return {
+		bounds,
+		instanceMeshCount,
+		placementCount: trees.length,
+		renderableRootCount,
+		visibleCount,
+	};
+};
+
+/** Creates a guaranteed-visible low-poly conifer source for thin instances. */
+const createProceduralMountainTreeRoot = (scene: BabylonScene): TransformNode => {
+	const rootNode = new TransformNode('tenerife-procedural-mountain-tree-root', scene);
+	const trunkMaterial = new StandardMaterial('tenerife-procedural-tree-trunk-material', scene);
+	const canopyMaterial = new StandardMaterial('tenerife-procedural-tree-canopy-material', scene);
+
+	trunkMaterial.diffuseColor = new Color3(0.32, 0.16, 0.07);
+	trunkMaterial.specularColor = Color3.Black();
+	canopyMaterial.diffuseColor = new Color3(0.04, 0.31, 0.11);
+	canopyMaterial.specularColor = Color3.Black();
+
+	const trunk = MeshBuilder.CreateCylinder(
+		'tenerife-procedural-mountain-tree-trunk',
+		{
+			diameter: PROCEDURAL_TREE_TRUNK_DIAMETER,
+			height: PROCEDURAL_TREE_TRUNK_HEIGHT,
+			tessellation: 7,
+		},
+		scene,
+	);
+	trunk.position.y = PROCEDURAL_TREE_TRUNK_HEIGHT / 2;
+	trunk.material = trunkMaterial;
+	trunk.parent = rootNode;
+
+	const canopy = MeshBuilder.CreateCylinder(
+		'tenerife-procedural-mountain-tree-canopy',
+		{
+			diameterBottom: PROCEDURAL_TREE_CANOPY_DIAMETER,
+			diameterTop: 0,
+			height: PROCEDURAL_TREE_CANOPY_HEIGHT,
+			tessellation: 8,
+		},
+		scene,
+	);
+	canopy.position.y = PROCEDURAL_TREE_CANOPY_BASE_Y;
+	canopy.material = canopyMaterial;
+	canopy.parent = rootNode;
+
+	return rootNode;
 };
 
 /** Keeps imported source meshes hidden until their thin-instance transforms are ready. */
@@ -74,7 +173,7 @@ export const activateMountainTreeInstanceMesh = (
 ): void => {
 	mesh.doNotSyncBoundingInfo = false;
 	mesh.thinInstanceSetBuffer('matrix', matrixBuffer, 16, false);
-	mesh.thinInstanceRefreshBoundingInfo(false);
+	mesh.thinInstanceRefreshBoundingInfo(true);
 	mesh.doNotSyncBoundingInfo = true;
 	mesh.isVisible = true;
 };
@@ -121,26 +220,37 @@ const getRaycastGroundYAtPosition = (
 export const isMountainTreeGroundAboveWater = (groundY: number): boolean =>
 	groundY >= TENERIFE_FULL_ISLAND_WATER_SURFACE_Y + TREE_MIN_GROUND_ABOVE_WATER;
 
+/** Chooses a visible ground height from runtime raycast and heightfield samples. */
+export const resolveMountainTreeGroundY = (
+	raycastY: number | null,
+	heightfieldY: number | null,
+): number | null => {
+	const hasVisibleRaycast = raycastY !== null && isMountainTreeGroundAboveWater(raycastY);
+	const hasVisibleHeightfield =
+		heightfieldY !== null && isMountainTreeGroundAboveWater(heightfieldY);
+
+	if (hasVisibleRaycast && hasVisibleHeightfield) {
+		return Math.max(raycastY, heightfieldY);
+	}
+
+	if (hasVisibleHeightfield) {
+		return heightfieldY;
+	}
+
+	return hasVisibleRaycast ? raycastY : null;
+};
+
 /** Resolves confirmed visible terrain height for a tree placement. */
 const getTreeGroundY = (
 	scene: BabylonScene,
 	tree: TenerifeMountainTreePlacementType,
 ): number | null => {
 	const raycastY = getRaycastGroundYAtPosition(scene, tree);
-
-	if (raycastY === null || !isMountainTreeGroundAboveWater(raycastY)) {
-		return null;
-	}
-
 	const heightfieldY = getTenerifeFullIslandHeightAtPosition(
 		new Vector3(tree.position.x, 0, tree.position.z),
 	);
 
-	if (heightfieldY !== null && isMountainTreeGroundAboveWater(heightfieldY)) {
-		return Math.max(raycastY, heightfieldY);
-	}
-
-	return raycastY;
+	return resolveMountainTreeGroundY(raycastY, heightfieldY);
 };
 
 /** Collects renderable meshes from a GLB root node while preserving source hierarchy. */
@@ -152,42 +262,6 @@ const getRootMeshes = (rootNode: TransformNode): Mesh[] => {
 	}
 
 	return meshes;
-};
-
-/** Finds the world-space Y anchor for imported source roots. */
-const getImportedRootsAnchorY = (rootNodes: TransformNode[]): number | null => {
-	const anchorRootNodes = rootNodes.filter(isMountainTreeTrunkRoot);
-	const rootsToMeasure = anchorRootNodes.length > 0 ? anchorRootNodes : rootNodes;
-	let minimumWorldY = Number.POSITIVE_INFINITY;
-
-	for (const rootNode of rootsToMeasure) {
-		rootNode.computeWorldMatrix(true);
-
-		for (const mesh of getRootMeshes(rootNode)) {
-			mesh.computeWorldMatrix(true);
-			mesh.refreshBoundingInfo(true);
-			minimumWorldY = Math.min(minimumWorldY, mesh.getBoundingInfo().boundingBox.minimumWorld.y);
-		}
-	}
-
-	if (!Number.isFinite(minimumWorldY)) {
-		return null;
-	}
-
-	return minimumWorldY;
-};
-
-/** Moves imported source roots so the trunk base becomes the terrain anchor. */
-const normalizeImportedRootsToTreeBase = (rootNodes: TransformNode[]): void => {
-	const anchorY = getImportedRootsAnchorY(rootNodes);
-
-	if (anchorY === null) {
-		return;
-	}
-
-	for (const rootNode of rootNodes) {
-		rootNode.position.y -= anchorY;
-	}
 };
 
 /** Prevents source meshes from becoming pickable or rendering as an extra base copy. */
@@ -226,7 +300,9 @@ const createTreeMatrixBuffer = (
 };
 
 /** Applies the shared tree placement buffer to every renderable mesh in the source GLB. */
-const applyTreeMatrixBuffer = (rootNodes: TransformNode[], matrixBuffer: Float32Array): void => {
+const applyTreeMatrixBuffer = (rootNodes: TransformNode[], matrixBuffer: Float32Array): number => {
+	let instanceMeshCount = 0;
+
 	for (const rootNode of rootNodes) {
 		for (const mesh of getRootMeshes(rootNode)) {
 			if (mesh.getTotalVertices() === 0) {
@@ -234,8 +310,11 @@ const applyTreeMatrixBuffer = (rootNodes: TransformNode[], matrixBuffer: Float32
 			}
 
 			activateMountainTreeInstanceMesh(mesh, matrixBuffer);
+			instanceMeshCount += 1;
 		}
 	}
+
+	return instanceMeshCount;
 };
 
 /** Creates current terrain-scanned tree placements after the heightfield is ready. */
@@ -262,7 +341,6 @@ const createRuntimeMountainTreePlacements = (): TenerifeMountainTreePlacementTyp
 const TenerifeMountainTrees: React.FC = () => {
 	const scene = useScene();
 	const anchorRef = useRef<TransformNode | null>(null);
-	const instantiatedEntriesRef = useRef<InstantiatedEntries | null>(null);
 
 	useEffect(() => {
 		if (!scene) {
@@ -274,17 +352,14 @@ const TenerifeMountainTrees: React.FC = () => {
 		let settlementAttempts = 0;
 
 		const disposeImportedResources = () => {
-			instantiatedEntriesRef.current?.dispose();
-
 			if (anchorRef.current && !anchorRef.current.isDisposed()) {
 				anchorRef.current.dispose(false, true);
 			}
 
-			instantiatedEntriesRef.current = null;
 			anchorRef.current = null;
 		};
 
-		const settleTrees = (rootNodes: TransformNode[]) => {
+		const settleTrees = (rootNodes: TransformNode[], renderableRootCount: number) => {
 			if (isDisposed) {
 				return;
 			}
@@ -294,7 +369,7 @@ const TenerifeMountainTrees: React.FC = () => {
 				settlementAttempts < TREE_SETTLEMENT_MAX_ATTEMPTS
 			) {
 				settlementAttempts += 1;
-				animationFrameId = requestAnimationFrame(() => settleTrees(rootNodes));
+				animationFrameId = requestAnimationFrame(() => settleTrees(rootNodes, renderableRootCount));
 				return;
 			}
 
@@ -303,47 +378,74 @@ const TenerifeMountainTrees: React.FC = () => {
 
 			if (visibleCount === 0 && settlementAttempts < TREE_SETTLEMENT_MAX_ATTEMPTS) {
 				settlementAttempts += 1;
-				animationFrameId = requestAnimationFrame(() => settleTrees(rootNodes));
+				animationFrameId = requestAnimationFrame(() => settleTrees(rootNodes, renderableRootCount));
 				return;
 			}
 
-			applyTreeMatrixBuffer(rootNodes, matrixBuffer);
+			const instanceMeshCount = applyTreeMatrixBuffer(rootNodes, matrixBuffer);
+			const debugSummary = createMountainTreeDebugSummary(
+				treePlacements,
+				visibleCount,
+				instanceMeshCount,
+				renderableRootCount,
+			);
+
+			window.__tenerifeMountainTrees = debugSummary;
+			console.info('[TenerifeMountainTrees] settled', debugSummary);
 		};
 
-		getSpruceTreeAssetContainer(scene)
-			.then((assetContainer) => {
+		const anchorNode = new TransformNode('tenerife-mountain-trees-anchor', scene);
+		anchorRef.current = anchorNode;
+
+		SceneLoader.ImportMeshAsync(undefined, '', SPRUCE_TREE_MODEL_URL, scene)
+			.then((result) => {
 				if (isDisposed) {
+					for (const mesh of result.meshes) {
+						mesh.dispose(false, true);
+					}
 					return;
 				}
 
-				const anchor = new TransformNode('tenerife-mountain-tree-anchor', scene);
-				const instantiatedEntries = assetContainer.instantiateModelsToScene(
-					(sourceName) => `tenerife-spruce-base-${sourceName}`,
-					false,
-				);
-				const rootNodes = instantiatedEntries.rootNodes.filter(
-					(rootNode): rootNode is TransformNode => rootNode instanceof TransformNode,
-				);
-				const renderableRootNodes = rootNodes.filter(shouldRenderMountainTreeSourceRoot);
+				// Collect renderable root nodes, skipping offset helpers and dry branches
+				const renderableRoots: TransformNode[] = [];
 
-				anchorRef.current = anchor;
-				instantiatedEntriesRef.current = instantiatedEntries;
+				for (const mesh of result.meshes) {
+					if (!shouldRenderMountainTreeSourceRoot(mesh)) {
+						mesh.isVisible = false;
+						mesh.isPickable = false;
+						continue;
+					}
 
-				for (const rootNode of rootNodes) {
-					rootNode.parent = anchor;
+					if (mesh instanceof Mesh) {
+						prepareMountainTreeSourceMesh(mesh);
+						mesh.parent = anchorNode;
+						renderableRoots.push(mesh);
+					}
 				}
 
-				normalizeImportedRootsToTreeBase(renderableRootNodes);
-
-				for (const rootNode of rootNodes) {
-					disableBaseMeshInteractions(rootNode);
+				if (renderableRoots.length === 0) {
+					console.warn('[TenerifeMountainTrees] No renderable meshes in GLB, using procedural fallback');
+					const proceduralRootNode = createProceduralMountainTreeRoot(scene);
+					proceduralRootNode.parent = anchorNode;
+					disableBaseMeshInteractions(proceduralRootNode);
+					settleTrees([proceduralRootNode], 1);
+					return;
 				}
 
-				settleTrees(renderableRootNodes);
+				console.info(
+					`[TenerifeMountainTrees] Loaded GLB with ${renderableRoots.length} renderable meshes`,
+				);
+				settleTrees(renderableRoots, renderableRoots.length);
 			})
 			.catch((error: unknown) => {
-				console.error('[TenerifeMountainTrees] Failed to load spruce tree asset', error);
-				disposeImportedResources();
+				if (isDisposed) {
+					return;
+				}
+				console.warn('[TenerifeMountainTrees] GLB load failed, using procedural fallback', error);
+				const proceduralRootNode = createProceduralMountainTreeRoot(scene);
+				proceduralRootNode.parent = anchorNode;
+				disableBaseMeshInteractions(proceduralRootNode);
+				settleTrees([proceduralRootNode], 1);
 			});
 
 		return () => {
