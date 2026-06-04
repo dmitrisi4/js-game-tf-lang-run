@@ -77,9 +77,9 @@ const TREE_YAW_STEP = 2.399963229728653;
  * Forest regions covering all island slopes outside the Teide volcanic desert.
  *
  * Scale legend  (world units = metres, GLB tree base ≈ 1 m):
- *   0.14 → short low-slope tree  (~7 m tall)
- *   0.17 → medium slope tree    (~8-9 m tall)  ← default
- *   0.20 → tall ridge/crest tree (~10 m tall)
+ *   0.09 → short low-slope tree  (~4-5 m tall)
+ *   0.11 → medium slope tree    (~5-6 m tall)  ← default
+ *   0.13 → tall ridge/crest tree (~6-7 m tall)
  *
  * minHeight safety rule: keep ≥ 26 m for coastal/foothill regions to prevent
  * trees appearing to float over the ocean when viewed from sea level.
@@ -102,7 +102,7 @@ const TENERIFE_MOUNTAIN_FOREST_REGIONS: TenerifeMountainForestRegionType[] = [
 		minHeight: 42,
 		minSpacing: 9,
 		minSlope: 0.015,
-		scaleBase: 0.17,
+		scaleBase: 0.11,
 		scanStep: 11,
 		slopeStep: 15,
 		xMax: 1320,
@@ -123,7 +123,7 @@ const TENERIFE_MOUNTAIN_FOREST_REGIONS: TenerifeMountainForestRegionType[] = [
 		minHeight: 26,
 		minSpacing: 7,
 		minSlope: 0.014,
-		scaleBase: 0.16,
+		scaleBase: 0.1,
 		scanStep: 9,
 		slopeStep: 12,
 		xMax: 1320,
@@ -143,7 +143,7 @@ const TENERIFE_MOUNTAIN_FOREST_REGIONS: TenerifeMountainForestRegionType[] = [
 		minHeight: 28,
 		minSpacing: 8,
 		minSlope: 0.013,
-		scaleBase: 0.16,
+		scaleBase: 0.1,
 		scanStep: 10,
 		slopeStep: 13,
 		xMax: 1320,
@@ -163,7 +163,7 @@ const TENERIFE_MOUNTAIN_FOREST_REGIONS: TenerifeMountainForestRegionType[] = [
 		minHeight: 28,
 		minSpacing: 6,
 		minSlope: 0.012,
-		scaleBase: 0.14,
+		scaleBase: 0.09,
 		scanStep: 9,
 		slopeStep: 12,
 		xMax: 1320,
@@ -182,7 +182,7 @@ const TENERIFE_MOUNTAIN_FOREST_REGIONS: TenerifeMountainForestRegionType[] = [
 		minHeight: 26,
 		minSpacing: 7,
 		minSlope: 0.016,
-		scaleBase: 0.16,
+		scaleBase: 0.1,
 		scanStep: 10,
 		slopeStep: 13,
 		xMax: -150,
