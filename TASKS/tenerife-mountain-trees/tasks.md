@@ -236,14 +236,14 @@ Context:
 Tasks:
 
 - [x] Revert the full-island map X bounds, WGS84 projection direction, Teide map landmark X, Puerto overlay X expectation, and Puerto spawn to the prior city/roads-compatible values.
-- [x] Replace the all-island tree scan with an `inland-mountain-safe-zone` window (`x=-900..60`, `z=-560..-80`).
-- [x] Raise tree minimum sampled height from `15` to `18` and add water-facing guard constants.
-- [x] Update regression coverage so generated trees stay out of the water-facing band without changing Puerto city/roads/spawn.
-- [x] Verify with real GLB sampling and project commands.
+- [x] Replace the all-island tree scan with an upper-mountain belt that targets high island slopes outside the Teide dry zone.
+- [x] Raise tree minimum sampled height to `22`, keep the maximum up to `72`, and densify placements (`scanStep=10`, `minSpacing=8`, `maxCount=900`).
+- [x] Fix live renderer visibility by using heightfield fallback for raycast misses, forcing thin-instance parent bounds refresh, and replacing the invisible imported spruce GLB source with a procedural conifer source mesh.
+- [x] Add runtime diagnostics exposed as `window.__tenerifeMountainTrees` so live placement count, visible count, mesh count, and generated bounds can be inspected without guessing.
+- [x] Update regression coverage so generated trees stay on upper mountain terrain, outside Teide dry zone, and do not change Puerto city/roads/spawn.
+- [x] Verify with real runtime browser view and project commands.
 
 Validation outcome:
 
-- Real GLB sampling after the fix: bounds `x=-1181.54..407.43`, `z=-741.52..598.92`; safe-zone generated `90` valid inland candidates and `50` selected renderable placements, with `0` `x>60`, `0` `z<-560`, and `0` `height<18` violations.
-- `bun run test -- src/scenes/environment/tenerifeFullIslandConfig.test.ts src/scenes/environment/tenerifeMountainTreeData.test.ts src/scenes/environment/TenerifeMountainTrees.test.ts` passed: 3 files, 18 tests.
-- `bun run check` passed.
-- `bun run build` passed; Vite emitted only the existing large chunk warning.
+- Runtime/browser validation after the final fix: `window.__tenerifeMountainTrees` reported `placementCount=900`, `visibleCount=900`, and `instanceMeshCount=2` for the procedural conifer source. Visual browser inspection confirmed green cone/brown trunk trees visible across upper mountain slopes/hilltops while Puerto city roads/buildings remain visible and no ocean tree line is present.
+- `bun run test -- src/scenes/environment/tenerifeFullIslandConfig.test.ts src/scenes/environment/tenerifeMountainTreeData.test.ts src/scenes/environment/TenerifeMountainTrees.test.ts` passed: 3 files, 20 tests. `bun run check` and `bun run build` passed; Vite emitted only the existing large chunk warning.

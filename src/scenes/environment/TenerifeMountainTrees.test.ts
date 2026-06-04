@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
 	activateMountainTreeInstanceMesh,
+	createMountainTreeDebugSummary,
 	isMountainTreeGroundAboveWater,
 	isMountainTreeTrunkRoot,
 	prepareMountainTreeSourceMesh,
+	resolveMountainTreeGroundY,
 	shouldRenderMountainTreeSourceRoot,
 } from '@/scenes/environment/TenerifeMountainTrees';
 import { TENERIFE_FULL_ISLAND_WATER_SURFACE_Y } from '@/scenes/environment/tenerifeFullIslandConfig';
@@ -63,7 +65,7 @@ describe('TenerifeMountainTrees', () => {
 			mesh.matrixBuffer = buffer;
 		};
 		mesh.thinInstanceRefreshBoundingInfo = (forceRefreshParentInfo) => {
-			expect(forceRefreshParentInfo).toBe(false);
+			expect(forceRefreshParentInfo).toBe(true);
 			mesh.refreshCount += 1;
 		};
 
@@ -98,5 +100,53 @@ describe('TenerifeMountainTrees', () => {
 	it('rejects terrain samples that would place tree trunks under the ocean surface', () => {
 		expect(isMountainTreeGroundAboveWater(TENERIFE_FULL_ISLAND_WATER_SURFACE_Y + 0.25)).toBe(false);
 		expect(isMountainTreeGroundAboveWater(TENERIFE_FULL_ISLAND_WATER_SURFACE_Y + 1)).toBe(true);
+	});
+
+	it('keeps mountain trees visible when heightfield is valid but raycast misses', () => {
+		expect(resolveMountainTreeGroundY(null, TENERIFE_FULL_ISLAND_WATER_SURFACE_Y + 24)).toBe(
+			TENERIFE_FULL_ISLAND_WATER_SURFACE_Y + 24,
+		);
+		expect(resolveMountainTreeGroundY(null, TENERIFE_FULL_ISLAND_WATER_SURFACE_Y + 0.25)).toBe(null);
+	});
+
+	it('summarizes live mountain tree placement diagnostics', () => {
+		const summary = createMountainTreeDebugSummary(
+			[
+				{
+					id: 'tree-a',
+					position: { x: -10, z: -30 },
+					regionId: 'upper-mountain-belt',
+					scale: 0.3,
+					terrainSample: { height: 25, slope: 0.1 },
+					yaw: 0,
+				},
+				{
+					id: 'tree-b',
+					position: { x: 20, z: 40 },
+					regionId: 'upper-mountain-belt',
+					scale: 0.35,
+					terrainSample: { height: 35, slope: 0.2 },
+					yaw: 0.5,
+				},
+			],
+			1,
+			7,
+			3,
+		);
+
+		expect(summary).toEqual({
+			bounds: {
+				maxHeight: 35,
+				maxX: 20,
+				maxZ: 40,
+				minHeight: 25,
+				minX: -10,
+				minZ: -30,
+			},
+			instanceMeshCount: 7,
+			placementCount: 2,
+			renderableRootCount: 3,
+			visibleCount: 1,
+		});
 	});
 });

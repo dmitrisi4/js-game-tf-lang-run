@@ -5,11 +5,9 @@ import {
 	isInsideTenerifeTeideDryZone,
 	TENERIFE_MOUNTAIN_TREE_MAX_SAMPLE_HEIGHT,
 	TENERIFE_MOUNTAIN_TREE_MAX_SAMPLE_SLOPE,
-	TENERIFE_MOUNTAIN_TREE_MAX_WATER_FACING_X,
 	TENERIFE_MOUNTAIN_TREE_MIN_SAMPLE_HEIGHT,
 	TENERIFE_MOUNTAIN_TREE_MIN_SAMPLE_SLOPE,
 	TENERIFE_MOUNTAIN_TREE_MIN_TOTAL_COUNT,
-	TENERIFE_MOUNTAIN_TREE_MIN_WATER_FACING_Z,
 	TENERIFE_TEIDE_DRY_ZONE_RADIUS,
 	type TenerifeMountainTreeHeightProviderType,
 	type TenerifeMountainTreePlacementType,
@@ -85,17 +83,16 @@ describe('tenerife mountain tree data', () => {
 		}
 	});
 
-	it('generates enough trees on inland mountain terrain without water-facing bands', () => {
+	it('generates dense trees on upper mountain terrain around Teide', () => {
 		const trees = getGeneratedTrees();
 
+		expect(TENERIFE_MOUNTAIN_TREE_MIN_SAMPLE_HEIGHT).toBeGreaterThanOrEqual(22);
+		expect(TENERIFE_MOUNTAIN_TREE_MAX_SAMPLE_HEIGHT).toBeGreaterThanOrEqual(70);
 		expect(trees.length).toBeGreaterThanOrEqual(TENERIFE_MOUNTAIN_TREE_MIN_TOTAL_COUNT);
-		expect(trees.some((tree) => tree.position.x < -500)).toBe(true);
-		expect(trees.some((tree) => tree.position.z < -300)).toBe(true);
-		expect(trees.every((tree) => tree.position.x <= TENERIFE_MOUNTAIN_TREE_MAX_WATER_FACING_X)).toBe(
-			true,
-		);
-		expect(trees.every((tree) => tree.position.z >= TENERIFE_MOUNTAIN_TREE_MIN_WATER_FACING_Z)).toBe(
-			true,
-		);
+		expect(trees.length).toBeGreaterThanOrEqual(200);
+		expect(trees.every((tree) => tree.terrainSample.height >= 22)).toBe(true);
+		expect(trees.some((tree) => tree.position.x > 120)).toBe(true);
+		expect(trees.some((tree) => tree.position.z < -450)).toBe(true);
+		expect(trees.some((tree) => tree.position.z > 120)).toBe(true);
 	});
 });

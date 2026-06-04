@@ -64,35 +64,33 @@ type TenerifeMountainTreeCandidateType = TenerifeMountainTreePlacementType & {
 
 export const TENERIFE_TEIDE_DRY_ZONE_RADIUS = 390;
 export const TENERIFE_MOUNTAIN_TREE_PLAYABLE_BOUNDS = TENERIFE_FULL_ISLAND_PLAYABLE_BOUNDS;
-export const TENERIFE_MOUNTAIN_TREE_MIN_SAMPLE_HEIGHT = 18;
-export const TENERIFE_MOUNTAIN_TREE_MAX_SAMPLE_HEIGHT = 55;
-export const TENERIFE_MOUNTAIN_TREE_MIN_SAMPLE_SLOPE = 0.04;
-export const TENERIFE_MOUNTAIN_TREE_MAX_SAMPLE_SLOPE = 0.55;
-export const TENERIFE_MOUNTAIN_TREE_MIN_TOTAL_COUNT = 100;
-export const TENERIFE_MOUNTAIN_TREE_MAX_WATER_FACING_X = 60;
-export const TENERIFE_MOUNTAIN_TREE_MIN_WATER_FACING_Z = -560;
+export const TENERIFE_MOUNTAIN_TREE_MIN_SAMPLE_HEIGHT = 22;
+export const TENERIFE_MOUNTAIN_TREE_MAX_SAMPLE_HEIGHT = 72;
+export const TENERIFE_MOUNTAIN_TREE_MIN_SAMPLE_SLOPE = 0.018;
+export const TENERIFE_MOUNTAIN_TREE_MAX_SAMPLE_SLOPE = 0.75;
+export const TENERIFE_MOUNTAIN_TREE_MIN_TOTAL_COUNT = 200;
 
 const TREE_SCALE_VARIANTS = [-0.018, 0.006, 0.018, -0.006, 0.012, -0.012, 0.024, 0];
 const TREE_YAW_STEP = 2.399963229728653;
 
 const TENERIFE_MOUNTAIN_FOREST_REGIONS: TenerifeMountainForestRegionType[] = [
 	{
-		id: 'inland-mountain-safe-zone',
-		focus: { x: -420, z: -260 },
-		maxCount: 500,
-		maxHeight: 55,
-		maxSlope: 0.55,
+		id: 'upper-mountain-belt',
+		focus: { x: -260, z: -240 },
+		maxCount: 900,
+		maxHeight: TENERIFE_MOUNTAIN_TREE_MAX_SAMPLE_HEIGHT,
+		maxSlope: TENERIFE_MOUNTAIN_TREE_MAX_SAMPLE_SLOPE,
 		minHeight: TENERIFE_MOUNTAIN_TREE_MIN_SAMPLE_HEIGHT,
-		minSpacing: 20,
-		minSlope: 0.04,
-		scaleBase: 0.175,
-		scanStep: 20,
+		minSpacing: 8,
+		minSlope: TENERIFE_MOUNTAIN_TREE_MIN_SAMPLE_SLOPE,
+		scaleBase: 0.32,
+		scanStep: 10,
 		slopeStep: 15,
-		xMax: TENERIFE_MOUNTAIN_TREE_MAX_WATER_FACING_X,
-		xMin: -900,
+		xMax: 1320,
+		xMin: -1320,
 		yawSeed: 1.18,
-		zMax: -80,
-		zMin: TENERIFE_MOUNTAIN_TREE_MIN_WATER_FACING_Z,
+		zMax: 1320,
+		zMin: -1320,
 	},
 ];
 
