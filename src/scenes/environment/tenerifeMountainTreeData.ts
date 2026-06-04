@@ -64,7 +64,7 @@ type TenerifeMountainTreeCandidateType = TenerifeMountainTreePlacementType & {
 export { TENERIFE_TEIDE_DRY_ZONE_RADIUS } from '@/scenes/environment/tenerifeBiomeZones';
 
 export const TENERIFE_MOUNTAIN_TREE_PLAYABLE_BOUNDS = TENERIFE_FULL_ISLAND_PLAYABLE_BOUNDS;
-export const TENERIFE_MOUNTAIN_TREE_MIN_SAMPLE_HEIGHT = 12;
+export const TENERIFE_MOUNTAIN_TREE_MIN_SAMPLE_HEIGHT = 18;
 export const TENERIFE_MOUNTAIN_TREE_MAX_SAMPLE_HEIGHT = 72;
 export const TENERIFE_MOUNTAIN_TREE_MIN_SAMPLE_SLOPE = 0.012;
 export const TENERIFE_MOUNTAIN_TREE_MAX_SAMPLE_SLOPE = 0.82;
@@ -77,9 +77,12 @@ const TREE_YAW_STEP = 2.399963229728653;
  * Forest regions covering all island slopes outside the Teide volcanic desert.
  *
  * Scale legend  (world units = metres, GLB tree base ≈ 1 m):
- *   0.18 → short low-slope tree  (~9 m tall)
- *   0.22 → medium slope tree    (~11 m tall)  ← default
- *   0.26 → tall ridge/crest tree (~13 m tall)
+ *   0.14 → short low-slope tree  (~7 m tall)
+ *   0.17 → medium slope tree    (~8-9 m tall)  ← default
+ *   0.20 → tall ridge/crest tree (~10 m tall)
+ *
+ * minHeight safety rule: keep ≥ 26 m for coastal/foothill regions to prevent
+ * trees appearing to float over the ocean when viewed from sea level.
  *
  * Region spatial layout (approximate world-X / world-Z ranges):
  *   north-slopes   : z -1320 → 0   (humid laurel belt, north coast)
@@ -99,7 +102,7 @@ const TENERIFE_MOUNTAIN_FOREST_REGIONS: TenerifeMountainForestRegionType[] = [
 		minHeight: 42,
 		minSpacing: 9,
 		minSlope: 0.015,
-		scaleBase: 0.22,
+		scaleBase: 0.17,
 		scanStep: 11,
 		slopeStep: 15,
 		xMax: 1320,
@@ -109,16 +112,18 @@ const TENERIFE_MOUNTAIN_FOREST_REGIONS: TenerifeMountainForestRegionType[] = [
 		zMin: -1320,
 	},
 	// ── North-slope laurel cloud forest (humid north coast) ───────────
+	// minHeight 26: keeps trees off the narrow coastal shelf that reads
+	// as floating over the ocean when viewed from sea level.
 	{
 		id: 'north-laurel-forest',
 		focus: { x: 200, z: -600 },
 		maxCount: 900,
 		maxHeight: 58,
 		maxSlope: 0.75,
-		minHeight: 18,
+		minHeight: 26,
 		minSpacing: 7,
 		minSlope: 0.014,
-		scaleBase: 0.2,
+		scaleBase: 0.16,
 		scanStep: 9,
 		slopeStep: 12,
 		xMax: 1320,
@@ -128,16 +133,17 @@ const TENERIFE_MOUNTAIN_FOREST_REGIONS: TenerifeMountainForestRegionType[] = [
 		zMin: -1320,
 	},
 	// ── South-slope mixed pine / scrub ────────────────────────────────
+	// minHeight 28: south coast is very flat; keep trees on true slopes.
 	{
 		id: 'south-pine-slopes',
 		focus: { x: -100, z: 500 },
 		maxCount: 800,
 		maxHeight: 62,
 		maxSlope: 0.78,
-		minHeight: 16,
+		minHeight: 28,
 		minSpacing: 8,
 		minSlope: 0.013,
-		scaleBase: 0.21,
+		scaleBase: 0.16,
 		scanStep: 10,
 		slopeStep: 13,
 		xMax: 1320,
@@ -147,16 +153,17 @@ const TENERIFE_MOUNTAIN_FOREST_REGIONS: TenerifeMountainForestRegionType[] = [
 		zMin: 0,
 	},
 	// ── East foothills (gentle anaga / coastal ramps) ─────────────────
+	// minHeight 28: eastern shelf sits very low; avoid near-water silhouettes.
 	{
 		id: 'east-foothills',
 		focus: { x: 800, z: 200 },
 		maxCount: 600,
 		maxHeight: 48,
 		maxSlope: 0.65,
-		minHeight: 12,
+		minHeight: 28,
 		minSpacing: 6,
 		minSlope: 0.012,
-		scaleBase: 0.18,
+		scaleBase: 0.14,
 		scanStep: 9,
 		slopeStep: 12,
 		xMax: 1320,
@@ -172,10 +179,10 @@ const TENERIFE_MOUNTAIN_FOREST_REGIONS: TenerifeMountainForestRegionType[] = [
 		maxCount: 600,
 		maxHeight: 60,
 		maxSlope: 0.82,
-		minHeight: 14,
+		minHeight: 26,
 		minSpacing: 7,
 		minSlope: 0.016,
-		scaleBase: 0.2,
+		scaleBase: 0.16,
 		scanStep: 10,
 		slopeStep: 13,
 		xMax: -150,
